@@ -1,0 +1,16 @@
+/.settings/
+/.idea/
+target/
+*.log
+*.iml
+/\.target/
+/\.cache
+/\.project
+/\.classpath
+.history
+.DS_Store
+/tmp/
+/admin/bintray-credentials
+/admin/secring.asc
+/secrets.tar
+/publish-settings.sbt
