@@ -12,7 +12,7 @@ import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 import scala.collection.JavaConverters._
 
-final case class DbTestRun(uuid: String, timestamp: Timestamp, message: Option[String],
+final case class DbTestRun(uuid: String, runId: Long, timestamp: Timestamp, message: Option[String],
                            gitTimestamp: Option[Timestamp], gitSha: Option[String], gitOrigin: Option[String], gitUpstream: Option[String],
                            hostname: Option[String],
                            javaVendor: Option[String], javaVersion: Option[String], jvmName: Option[String], jvmVersion: Option[String],
@@ -44,6 +44,7 @@ class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extend
 
   class TestRunRow(tag: Tag) extends Table[DbTestRun](tag, "TEST_RUNS") {
     def uuid = column[String]("UUID", O.PrimaryKey, O.Length(36))
+    def runId = column[Long]("RUN_ID", O.AutoInc, O.Unique)
     def timestamp = column[Timestamp]("TIMESTAMP")
     def message = column[Option[String]]("MESSAGE")
 
@@ -62,8 +63,8 @@ class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extend
     def gitData = column[String]("GIT_DATA")
     def platformData = column[String]("PLATFORM_DATA")
 
-    def * = (uuid, timestamp, message, gitTimestamp, gitSha, gitOrigin, gitUpstream, hostname, javaVendor, javaVersion, jvmName, jvmVersion, username, gitData, platformData).mapTo[DbTestRun]
-    def withoutRaw = (uuid, timestamp, message, gitTimestamp, gitSha, gitOrigin, gitUpstream, hostname, javaVendor, javaVersion, jvmName, jvmVersion, username, "", "").mapTo[DbTestRun]
+    def * = (uuid, runId, timestamp, message, gitTimestamp, gitSha, gitOrigin, gitUpstream, hostname, javaVendor, javaVersion, jvmName, jvmVersion, username, gitData, platformData).mapTo[DbTestRun]
+    def withoutRaw = (uuid, runId, timestamp, message, gitTimestamp, gitSha, gitOrigin, gitUpstream, hostname, javaVendor, javaVersion, jvmName, jvmVersion, username, "", "").mapTo[DbTestRun]
   }
 
   lazy val testRuns = TableQuery[TestRunRow]
@@ -109,7 +110,7 @@ class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extend
 
   class JvmArgRow(tag: Tag) extends Table[DbJvmArg](tag, "JVM_ARGS") {
     def runResultUuid = column[String]("RUN_RESULT_UUID", O.Length(36))
-    def runResult = foreignKey("JVM_ARGS_RUN_RESULT_FK", runResultUuid, runResults)(_.uuid, onDelete=ForeignKeyAction.Cascade)
+    //def runResult = foreignKey("JVM_ARGS_RUN_RESULT_FK", runResultUuid, runResults)(_.uuid, onDelete=ForeignKeyAction.Cascade)
     def sequence = column[Int]("SEQUENCE")
     def value = column[String]("VALUE")
     def pk = primaryKey("PK_JVM_ARGS", (runResultUuid, sequence))
@@ -120,7 +121,7 @@ class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extend
 
   class JmhArgRow(tag: Tag) extends Table[DbJmhArg](tag, "JMH_ARGS") {
     def testRunUuid = column[String]("TEST_RUN_UUID", O.Length(36))
-    def testRun = foreignKey("JMH_ARGS_TEST_RUN_FK", testRunUuid, testRuns)(_.uuid, onDelete=ForeignKeyAction.Cascade)
+    //def testRun = foreignKey("JMH_ARGS_TEST_RUN_FK", testRunUuid, testRuns)(_.uuid, onDelete=ForeignKeyAction.Cascade)
     def sequence = column[Int]("SEQUENCE")
     def value = column[String]("VALUE")
     def pk = primaryKey("PK_JMH_ARGS", (testRunUuid, sequence))
@@ -152,17 +153,25 @@ class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extend
   def checkVersion: DBIO[Unit] =
     meta.filter(_.key === "version").map(_.value).result.head.map(v => if(v == DB_VERSION) () else logger.error(s"Unsupported database version $v, expeted $DB_VERSION"))
 
-  def insertRun(run: DbTestRun, runResultsData: Iterable[DbRunResult], jvmArgsData: Iterable[DbJvmArg], runResultParamsData: Iterable[DbRunResultParam], jmhArgsData: Iterable[DbJmhArg]): DBIO[Unit] = (for {
-    _ <- testRuns.forceInsert(run)
+  def insertRun(run: DbTestRun, runResultsData: Iterable[DbRunResult], jvmArgsData: Iterable[DbJvmArg], runResultParamsData: Iterable[DbRunResultParam], jmhArgsData: Iterable[DbJmhArg]): DBIO[Long] = (for {
+    runId <- (testRuns returning testRuns.map(_.runId)) += run
     _ <- runResults.forceInsertAll(runResultsData)
     _ <- runResultParams.forceInsertAll(runResultParamsData)
     _ <- jvmArgs.forceInsertAll(jvmArgsData)
     _ <- jmhArgs.forceInsertAll(jmhArgsData)
-  } yield ()).transactionally
+  } yield runId).transactionally
 
-  def queryResults(runUuidPrefix: Option[String]): DBIO[Seq[DbRunResult]] = {
-    val q = runResults.filterOpt(runUuidPrefix)((rr, uuid) => rr.testRunUuid.startsWith(uuid))
-    q.sortBy(rr => (rr.testRunUuid, rr.sequence)).result
+  def queryResults(runIds: Seq[Long]): DBIO[Seq[(DbRunResult, Long)]] = {
+
+    val q = for {
+      rr <- runResults
+      tr <- rr.testRun if tr.runId.inSet(runIds)
+    } yield (rr, tr.runId)
+
+    q.sortBy { case (rr, runId) => (runId, rr.sequence) }.result
+
+    //val q = runResults.filterOpt(runId)((rr, id) => rr.testRunUuid.in(testRuns.filter(_.runId === id).map(_.uuid)))
+    //q.sortBy(rr => (rr.testRunUuid, rr.sequence)).result
   }
 
   def countTestRuns(runUuidPrefix: Option[String]): DBIO[Int] = {

@@ -11,7 +11,7 @@ import java.util.regex.Pattern
 import better.files._
 
 import scala.collection.JavaConverters._
-import com.typesafe.config.{ConfigFactory, ConfigParseOptions, ConfigRenderOptions}
+import com.typesafe.config.{ConfigFactory, ConfigParseOptions, ConfigRenderOptions, ConfigValueFactory}
 
 object Main extends Logging {
 
@@ -19,8 +19,9 @@ object Main extends Logging {
 
     val config = Opts.option[Path]("config", help = "Configuration file.").orNone
     val noUserConfig = Opts.flag("no-user-config", help = "Don't read ~/.benchdb.conf").orFalse
+    val props = Opts.options[String]("set", short = "D", help = "Overwrite a configuration option (key=value)").map(_.toList).orElse(Opts(Nil))
 
-    val globalOptions = (config, noUserConfig).mapN(GlobalOptions).map(_.validate())
+    val globalOptions = (config, noUserConfig, props).mapN(GlobalOptions).map(_.validate())
 
     val force = Opts.flag("force", "Required to actually perform the operation.").orFalse
 
@@ -57,10 +58,11 @@ object Main extends Logging {
 
     val queryResultsCommand = Command[GlobalOptions => Unit](name = "results", header =
       "Query the database for test results and print them.") {
-      val run = Opts.option[String]("run", help = "UUID prefix of a test run.").orNone
+      val runs = Opts.options[Long]("run", short = "r", help = "IDs of the test runs to include.").map(_.toList).orElse(Opts(Nil))
+      val benchs = Opts.options[String]("benchmark", short = "b", help = "Glob patterns of benchmark names to include.").map(_.toList).orElse(Opts(Nil))
       val scorePrecision = Opts.option[Int]("score-precision", help = "Precision of score and error in tables (default: 3)").withDefault(3)
       val raw = Opts.flag("raw", "Print raw JSON data instead of a table.").orFalse
-      (run, scorePrecision, raw).mapN { case (run, sp, raw) => queryResults(_, run, sp, raw) }
+      (runs, benchs, scorePrecision, raw).mapN { case (runs, benchs, sp, raw) => queryResults(_, runs, benchs, sp, raw) }
     }
 
     val listRunsCommand = Command[GlobalOptions => Unit](name = "list", header =
@@ -122,7 +124,7 @@ object Main extends Logging {
     new Global(go).use { g =>
       val gd = new GitData(projectDir)
       val pd = new PlatformData
-      val run = new DbTestRun(UUID.randomUUID().toString, Timestamp.from(Instant.now()), message,
+      val run = new DbTestRun(UUID.randomUUID().toString, -1, Timestamp.from(Instant.now()), message,
         gd.getHeadDate.map(d => Timestamp.from(Instant.ofEpochMilli(d.getTime))), gd.getHeadSHA, gd.getOriginURL, gd.getUpstreamURL,
         Option(pd.hostname), Option(pd.javaVendor), Option(pd.javaVersion), Option(pd.javaVmName), Option(pd.javaVmVersion),
         Option(pd.userName),
@@ -142,42 +144,52 @@ object Main extends Logging {
         val dJmhArgs = jmhArgs.zipWithIndex.map { case (s, idx) =>
           new DbJmhArg(run.uuid, idx, s)
         }
-        g.dao.run(g.dao.checkVersion andThen g.dao.insertRun(run, runResults, jvmArgs, runResultParams, dJmhArgs))
-        println(s"Test run ${run.uuid} with ${runResults.size} results inserted.")
+        val runId = g.dao.run(g.dao.checkVersion andThen g.dao.insertRun(run, runResults, jvmArgs, runResultParams, dJmhArgs))
+        println(s"Test run #${runId} with ${runResults.size} results inserted.")
       }
     }
   }
 
-  def queryResults(go: GlobalOptions, run: Option[String], scorePrecision: Int, raw: Boolean): Unit = {
+  def queryResults(go: GlobalOptions, runs: Seq[Long], benchs: Seq[String], scorePrecision: Int, raw: Boolean): Unit = {
     new Global(go).use { g =>
-      //TODO bet behavior when `run` is empty?
+      //TODO best behavior when `run` is empty?
       //val count = g.dao.run(g.dao.checkVersion andThen g.dao.countTestRuns(run))
       //if(count == 0)
       //  logger.error(s"No test run with UUID prefix ${run.get} found")
-      val rrs = g.dao.run(g.dao.checkVersion andThen g.dao.queryResults(run))
+      val multi = runs.size > 1
+      def multiName(rr: DbRunResult, runId: Long): String =
+        if(multi) s"#$runId:${rr.benchmark}" else rr.benchmark
+      val rrs = g.dao.run(g.dao.checkVersion andThen g.dao.queryResults(runs))
+      val rrs2 = if(benchs.isEmpty) rrs else {
+        val patterns = benchs.map(compileGlobPattern)
+        rrs.filter { case (rr, runId) => patterns.exists(p => p.matcher(multiName(rr, runId)).matches()) }
+      }
       if(raw) {
         print("[")
-        rrs.zipWithIndex.foreach { case (rr, idx) =>
+        rrs2.zipWithIndex.foreach { case ((rr, runId), idx) =>
           if(idx == 0) println()
           else println(",")
           val c = ConfigFactory.parseString(rr.rawData)
-          val lines = c.root.render(ConfigRenderOptions.defaults().setOriginComments(false)).lines.filterNot(_.isEmpty).toIndexedSeq
+          val c2 = if(multi) {
+            c.withValue("benchmark", ConfigValueFactory.fromAnyRef(multiName(rr, runId)))
+          } else c
+          val lines = c2.root.render(ConfigRenderOptions.defaults().setOriginComments(false)).lines.filterNot(_.isEmpty).toIndexedSeq
           print(lines.mkString("    ", "\n    ", ""))
         }
         println()
         println("]")
       } else {
         import TableFormatter._
-        val rs = rrs.map(RunResult.fromDb)
-        val paramNames = rs.flatMap(_.params.keys).distinct.toIndexedSeq
+        val rs = rrs2.map { case (rr, runId) => (RunResult.fromDb(rr), runId) }
+        val paramNames = rs.flatMap(_._1.params.keys).distinct.toIndexedSeq
         val columns = IndexedSeq(
           Seq(TextColumn("Benchmark")),
           paramNames.map(s => TextColumn(s"($s)", true)),
           Seq(TextColumn("Mode"), TextColumn("Cnt", true), ScoreColumn("Score", scorePrecision), ScoreColumn("Error", scorePrecision), TextColumn("Units"))
         ).flatten
-        val data = rs.iterator.map { r =>
+        val data = rs.iterator.map { case (r, runId) =>
           IndexedSeq(
-            Seq(r.db.benchmark),
+            Seq(multiName(r.db, runId)),
             paramNames.map(k => r.params.getOrElse(k, "")),
             Seq(r.db.mode, r.db.forks * r.db.measurementIterations * r.db.measurementBatchSize, r.primaryMetric.score, r.primaryMetric.scoreError, r.primaryMetric.scoreUnit)
           ).flatten
@@ -193,7 +205,7 @@ object Main extends Logging {
       val runs = g.dao.run(g.dao.checkVersion andThen g.dao.listTestRuns(limit))
       import TableFormatter._
       var columns = IndexedSeq(
-        TextColumn("UUID"),
+        TextColumn("ID", true),
         TextColumn("Timestamp"),
         TextColumn("Msg")
       )
@@ -212,7 +224,7 @@ object Main extends Logging {
         TextColumn("JVM Version")
       )
       val data = runs.iterator.map { r =>
-        var line = IndexedSeq(r.uuid, r.timestamp, r.message)
+        var line = IndexedSeq(r.runId, r.timestamp, r.message)
         if(gitData) line = line ++ IndexedSeq(r.gitSha.map(_.take(7)), r.gitTimestamp, r.gitOrigin, r.gitUpstream)
         if(platformData) line = line ++ IndexedSeq(r.hostname, r.username, r.javaVendor, r.javaVersion, r.jvmName, r.jvmVersion)
         line

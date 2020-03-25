@@ -13,7 +13,7 @@ import better.files._
 import scala.collection.JavaConverters._
 import com.typesafe.config.{ConfigFactory, ConfigParseOptions, ConfigRenderOptions}
 
-case class GlobalOptions(configPath: Option[Path], noUserConfig: Boolean) extends Logging {
+case class GlobalOptions(configPath: Option[Path], noUserConfig: Boolean, props: Seq[String]) extends Logging {
   val config = {
     val opts = ConfigParseOptions.defaults().setAllowMissing(false)
     val refConf = ConfigFactory.parseResources(getClass, "/benchdb-reference.conf")
@@ -27,7 +27,7 @@ case class GlobalOptions(configPath: Option[Path], noUserConfig: Boolean) extend
         logger.debug(s"User configuration file $userConfPath not found")
         refConf
       }
-    (configPath match {
+    val localConf = (configPath match {
       case Some(p) =>
         if(Files.exists(p)) {
           logger.debug(s"Parsing config file $p")
@@ -37,7 +37,14 @@ case class GlobalOptions(configPath: Option[Path], noUserConfig: Boolean) extend
           userConf
         }
       case None => userConf
-    }).resolve()
+    })
+    val overrides = new java.util.HashMap[String, String]
+    props.foreach { s =>
+      val sep = s.indexOf('=')
+      if(sep != -1)
+      overrides.put(s.substring(0, sep), s.substring(sep+1))
+    }
+    ConfigFactory.parseMap(overrides).withFallback(localConf).resolve()
   }
 
   def validate(): this.type = {
