@@ -18,7 +18,7 @@ class TableFormatter(val go: GlobalOptions) {
       case v => String.valueOf(v)
     }
     c match {
-      case ScoreColumn(_, prec) => String.format("%." + prec + "f", v.asInstanceOf[AnyRef])
+      case ScoreColumn(_, prec) => ScoreFormatter(v, prec)
       case _ => fmtSimple(v)
     }
   }
@@ -68,4 +68,9 @@ object TableFormatter {
   }
   case class TextColumn(title: String, rightAlign: Boolean = false) extends Column
   case class ScoreColumn(title: String, precision: Int) extends Column { def rightAlign = true }
+}
+
+object ScoreFormatter {
+  def apply(value: Any, precision: Int): String =
+    String.format("%." + precision + "f", value.asInstanceOf[AnyRef])
 }

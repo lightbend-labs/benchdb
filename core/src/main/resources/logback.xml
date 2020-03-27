@@ -1,14 +1,14 @@
 <configuration>
-    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender" target="System.err">
         <encoder>
             <pattern>%highlight([%1.-1level]) %20.20logger{20}: %msg%n</pattern>
         </encoder>
     </appender>
     <appender name="TRIGGER" class="com.lightbend.benchdb.ErrorRecognitionAppender" />
     <root level="${log.root:-error}">
-        <appender-ref ref="STDOUT" />
+        <appender-ref ref="STDERR" />
         <appender-ref ref="TRIGGER" />
     </root>
-    <logger name="com.lightbend.benchdb"                   level="debug" />
+    <logger name="com.lightbend.benchdb"                   level="warn" />
     <logger name="slick"                                   level="warn" />
 </configuration>

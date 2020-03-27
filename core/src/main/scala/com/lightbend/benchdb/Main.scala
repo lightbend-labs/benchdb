@@ -6,7 +6,6 @@ import java.nio.file.{FileSystems, Files, Path}
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
-import java.util.regex.Pattern
 
 import better.files._
 
@@ -56,13 +55,19 @@ object Main extends Logging {
       (projectDir, message, resultFile, jmhArgs).mapN { case (projectDir, message, resultFile, jmhArgs) => insertRun(_, projectDir, message, resultFile, jmhArgs) }
     }
 
+    val runs = Opts.options[Long]("run", short = "r", help = "IDs of the test runs to include.").map(_.toList).orElse(Opts(Nil))
+    val benchs = Opts.options[String]("benchmark", short = "b", help = "Glob patterns of benchmark names to include.").map(_.toList).orElse(Opts(Nil))
+    val scorePrecision = Opts.option[Int]("score-precision", help = "Precision of score and error in tables (default: 3)").withDefault(3)
     val queryResultsCommand = Command[GlobalOptions => Unit](name = "results", header =
       "Query the database for test results and print them.") {
-      val runs = Opts.options[Long]("run", short = "r", help = "IDs of the test runs to include.").map(_.toList).orElse(Opts(Nil))
-      val benchs = Opts.options[String]("benchmark", short = "b", help = "Glob patterns of benchmark names to include.").map(_.toList).orElse(Opts(Nil))
-      val scorePrecision = Opts.option[Int]("score-precision", help = "Precision of score and error in tables (default: 3)").withDefault(3)
       val raw = Opts.flag("raw", "Print raw JSON data instead of a table.").orFalse
       (runs, benchs, scorePrecision, raw).mapN { case (runs, benchs, sp, raw) => queryResults(_, runs, benchs, sp, raw) }
+    }
+    val chartCommand = Command[GlobalOptions => Unit](name = "chart", header =
+      "Create a line chart of test results.") {
+      val template = Opts.option[Path]("template", "HTML template containing file.").orNone
+      val out = Opts.option[Path]("out", short = "o", help = "Output file to generate, or '-' for stdout.").orNone
+      (runs, benchs, scorePrecision, template, out).mapN { case (runs, benchs, sp, template, out) => createChart(_, runs, benchs, sp, template, out, args) }
     }
 
     val listRunsCommand = Command[GlobalOptions => Unit](name = "list", header =
@@ -74,7 +79,7 @@ object Main extends Logging {
     }
 
     val benchdbCommand = Command("benchdb", "jmh benchmark database client") {
-      val sub = Opts.subcommands(showMetaCommand, initDbCommand, deleteDbCommand, insertRunCommand, queryResultsCommand, listRunsCommand)
+      val sub = Opts.subcommands(showMetaCommand, initDbCommand, deleteDbCommand, insertRunCommand, queryResultsCommand, chartCommand, listRunsCommand)
       (globalOptions, sub).mapN { (go, cmd) => cmd(go) }
     }
 
@@ -132,7 +137,7 @@ object Main extends Logging {
       if(!Files.isRegularFile(resultFile))
         logger.error(s"Result file s$resultFile not found.")
       else {
-        val resultJson = "data = " + File.apply(resultFile).contentAsString(charset = "UTF-8")
+        val resultJson = "data = " + File(resultFile).contentAsString(charset = "UTF-8")
         val resultConfigs = ConfigFactory.parseString(resultJson).getConfigList("data").asScala
         val daoData = resultConfigs.iterator.zipWithIndex.map { case (rc, idx) =>
           val rr = RunResult.fromRaw(UUID.randomUUID().toString, idx, run.uuid, rc)
@@ -157,21 +162,17 @@ object Main extends Logging {
       //if(count == 0)
       //  logger.error(s"No test run with UUID prefix ${run.get} found")
       val multi = runs.size > 1
-      def multiName(rr: DbRunResult, runId: Long): String =
-        if(multi) s"#$runId:${rr.benchmark}" else rr.benchmark
-      val rrs = g.dao.run(g.dao.checkVersion andThen g.dao.queryResults(runs))
-      val rrs2 = if(benchs.isEmpty) rrs else {
-        val patterns = benchs.map(compileGlobPattern)
-        rrs.filter { case (rr, runId) => patterns.exists(p => p.matcher(multiName(rr, runId)).matches()) }
-      }
+      val allRs = g.dao.run(g.dao.checkVersion andThen g.dao.queryResults(runs))
+        .map { case (rr, runId) => RunResult.fromDb(rr, runId, multi) }
+      val rs = RunResult.filterByName(benchs, allRs).toSeq
       if(raw) {
         print("[")
-        rrs2.zipWithIndex.foreach { case ((rr, runId), idx) =>
+        rs.zipWithIndex.foreach { case (r, idx) =>
           if(idx == 0) println()
           else println(",")
-          val c = ConfigFactory.parseString(rr.rawData)
+          val c = ConfigFactory.parseString(r.db.rawData)
           val c2 = if(multi) {
-            c.withValue("benchmark", ConfigValueFactory.fromAnyRef(multiName(rr, runId)))
+            c.withValue("benchmark", ConfigValueFactory.fromAnyRef(r.name))
           } else c
           val lines = c2.root.render(ConfigRenderOptions.defaults().setOriginComments(false)).lines.filterNot(_.isEmpty).toIndexedSeq
           print(lines.mkString("    ", "\n    ", ""))
@@ -180,22 +181,51 @@ object Main extends Logging {
         println("]")
       } else {
         import TableFormatter._
-        val rs = rrs2.map { case (rr, runId) => (RunResult.fromDb(rr), runId) }
-        val paramNames = rs.flatMap(_._1.params.keys).distinct.toIndexedSeq
+        val paramNames = rs.flatMap(_.params.keys).distinct.toIndexedSeq
         val columns = IndexedSeq(
           Seq(TextColumn("Benchmark")),
           paramNames.map(s => TextColumn(s"($s)", true)),
           Seq(TextColumn("Mode"), TextColumn("Cnt", true), ScoreColumn("Score", scorePrecision), ScoreColumn("Error", scorePrecision), TextColumn("Units"))
         ).flatten
-        val data = rs.iterator.map { case (r, runId) =>
+        val data = rs.iterator.map { r =>
           IndexedSeq(
-            Seq(multiName(r.db, runId)),
+            Seq(r.name),
             paramNames.map(k => r.params.getOrElse(k, "")),
             Seq(r.db.mode, r.db.forks * r.db.measurementIterations * r.db.measurementBatchSize, r.primaryMetric.score, r.primaryMetric.scoreError, r.primaryMetric.scoreUnit)
           ).flatten
         }.toIndexedSeq
         val table = new TableFormatter(go).apply(columns, data)
         table.foreach(println)
+      }
+    }
+  }
+
+  def createChart(go: GlobalOptions, runs: Seq[Long], benchs: Seq[String], scorePrecision: Int, template: Option[Path], out: Option[Path], cmdLine: Array[String]): Unit = {
+    new Global(go).use { g =>
+      if(out.isEmpty)
+        logger.error(s"No output file given.")
+      else {
+        val multi = runs.size > 1
+        val allRs = g.dao.run(g.dao.checkVersion andThen g.dao.queryResults(runs))
+          .map { case (rr, runId) => RunResult.fromDb(rr, runId, multi) }
+        val rs = RunResult.filterByName(benchs, allRs).toSeq
+        val data = new GenerateCharts(go, scorePrecision).generate(rs)
+        val templateHtml = template match {
+          case Some(p) =>
+            if(!Files.isRegularFile(p)) {
+              logger.error(s"Template file $p not found.")
+              None
+            } else Some(File(p).contentAsString(charset = "UTF-8"))
+          case None => Some(Resource.getAsString("chart-template.html")(charset = "UTF-8"))
+        }
+        templateHtml.foreach { tmpl =>
+          val html = tmpl.replaceAllLiterally("@benchmarkData", data).replaceAllLiterally("@commandLine", cmdLine.mkString(" "))
+          if(out.get.toString == "-") println(html.trim)
+          else {
+            File(out.get).write(html)(charset = "UTF-8")
+            println(s"Charts written to '${out.get}'.")
+          }
+        }
       }
     }
   }
@@ -234,18 +264,5 @@ object Main extends Logging {
       val reached = if(limit.getOrElse(-1) == runs.size) " (limit reached)" else ""
       println(s"${runs.size} test runs found$reached.")
     }
-  }
-
-  def compileGlobPattern(expr: String) = {
-    val a = expr.split("\\*", -1)
-    val b = new StringBuilder
-    var i = 0
-    while(i < a.length) {
-      if(i != 0) b.append(".*")
-      if(!a(i).isEmpty)
-        b.append(Pattern.quote(a(i).replaceAll("\n", "\\n")))
-      i += 1
-    }
-    Pattern.compile(b.toString)
   }
 }

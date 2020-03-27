@@ -1,0 +1,45 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style type="text/css">
+    .chart { width: 900px; height: 500px; }
+    .imglink { font-size: 0.8em; margin-left: 2em; margin-bottom: 2em; }
+    .imglink a { color: #b0b0b0 !important; }
+    div.google-visualization-tooltip { padding: 0.9em 0 0 0.9em; font-size: 0.9em; }
+  </style>
+  <!-- benchdb command line: @commandLine -->
+  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+  <script type="text/javascript">
+    var benchmarkData = @benchmarkData;
+
+    google.charts.load('current', {'packages':['corechart']});
+    google.charts.setOnLoadCallback(drawCharts);
+
+    function drawCharts() {
+      for(var i=0; i<benchmarkData.length; i++)
+        drawChart(benchmarkData[i]);
+    }
+
+    function drawChart(chartData) {
+      var data = new google.visualization.DataTable();
+      for(var i=0; i<chartData.columns.length; i++)
+        data.addColumn(chartData.columns[i]);
+      data.addRows(chartData.rows);
+      var cont = document.getElementById("chart_container");
+      var div = document.createElement("div");
+      div.className = "chart";
+      cont.appendChild(div);
+      var linkDiv = document.createElement("div");
+      linkDiv.className = "imglink";
+      cont.appendChild(linkDiv);
+      var chart = new google.visualization.LineChart(div);
+      google.visualization.events.addListener(chart, 'ready', function () {
+        linkDiv.innerHTML = '<a href="' + chart.getImageURI() + '">PNG image link</a>';
+      });
+      chart.draw(data, chartData.options);
+    }
+  </script>
+</head>
+<body id="chart_container">
+</body>
+</html>
