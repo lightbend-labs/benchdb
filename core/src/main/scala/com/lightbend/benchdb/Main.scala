@@ -6,6 +6,7 @@ import java.nio.file.{FileSystems, Files, Path}
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
+import java.util.regex.PatternSyntaxException
 
 import better.files._
 
@@ -57,11 +58,12 @@ object Main extends Logging {
 
     val runs = Opts.options[Long]("run", short = "r", help = "IDs of the test runs to include.").map(_.toList).orElse(Opts(Nil))
     val benchs = Opts.options[String]("benchmark", short = "b", help = "Glob patterns of benchmark names to include.").map(_.toList).orElse(Opts(Nil))
+    val extract = Opts.options[String]("extract", help = "Extractor pattern to generate parameters from names.").map(_.toList).orElse(Opts(Nil))
     val scorePrecision = Opts.option[Int]("score-precision", help = "Precision of score and error in tables (default: 3)").withDefault(3)
     val queryResultsCommand = Command[GlobalOptions => Unit](name = "results", header =
       "Query the database for test results and print them.") {
       val raw = Opts.flag("raw", "Print raw JSON data instead of a table.").orFalse
-      (runs, benchs, scorePrecision, raw).mapN { case (runs, benchs, sp, raw) => queryResults(_, runs, benchs, sp, raw) }
+      (runs, benchs, extract, scorePrecision, raw).mapN { case (runs, benchs, extract, sp, raw) => queryResults(_, runs, benchs, extract, sp, raw) }
     }
     val chartCommand = Command[GlobalOptions => Unit](name = "chart", header =
       "Create a line chart of test results.") {
@@ -155,7 +157,7 @@ object Main extends Logging {
     }
   }
 
-  def queryResults(go: GlobalOptions, runs: Seq[Long], benchs: Seq[String], scorePrecision: Int, raw: Boolean): Unit = {
+  def queryResults(go: GlobalOptions, runs: Seq[Long], benchs: Seq[String], extract: Seq[String], scorePrecision: Int, raw: Boolean): Unit = try {
     new Global(go).use { g =>
       //TODO best behavior when `run` is empty?
       //val count = g.dao.run(g.dao.checkVersion andThen g.dao.countTestRuns(run))
@@ -164,16 +166,16 @@ object Main extends Logging {
       val multi = runs.size > 1
       val allRs = g.dao.run(g.dao.checkVersion andThen g.dao.queryResults(runs))
         .map { case (rr, runId) => RunResult.fromDb(rr, runId, multi) }
-      val rs = RunResult.filterByName(benchs, allRs).toSeq
+      val rs = RunResult.extract(extract, RunResult.filterByName(benchs, allRs)).toSeq
       if(raw) {
         print("[")
         rs.zipWithIndex.foreach { case (r, idx) =>
           if(idx == 0) println()
           else println(",")
           val c = ConfigFactory.parseString(r.db.rawData)
-          val c2 = if(multi) {
-            c.withValue("benchmark", ConfigValueFactory.fromAnyRef(r.name))
-          } else c
+          val c2 = ConfigFactory.parseMap(
+            (Map("benchmark" -> r.name) ++ r.params.map { case (k, v) => ("params."+k, v) }).asJava
+          ).withFallback(c).resolve()
           val lines = c2.root.render(ConfigRenderOptions.defaults().setOriginComments(false)).lines.filterNot(_.isEmpty).toIndexedSeq
           print(lines.mkString("    ", "\n    ", ""))
         }
@@ -198,6 +200,8 @@ object Main extends Logging {
         table.foreach(println)
       }
     }
+  } catch {
+    case ex: PatternSyntaxException => logger.error(ex.toString)
   }
 
   def createChart(go: GlobalOptions, runs: Seq[Long], benchs: Seq[String], scorePrecision: Int, template: Option[Path], out: Option[Path], cmdLine: Array[String]): Unit = {
