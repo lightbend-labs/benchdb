@@ -161,17 +161,20 @@ class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extend
     _ <- jmhArgs.forceInsertAll(jmhArgsData)
   } yield runId).transactionally
 
-  def queryResults(runIds: Seq[Long]): DBIO[Seq[(DbRunResult, Long)]] = {
+  def queryResults(runIds: Seq[String]): DBIO[Seq[(DbRunResult, Long)]] = {
+    if(runIds.isEmpty || runIds.contains("last")) {
+      testRuns.sortBy(_.timestamp.reverse).map(_.runId).result.headOption.flatMap { last =>
+        queryResultsById(last.toSeq ++ runIds.filter(_ != "last").map(_.toLong))
+      }
+    } else queryResultsById(runIds.map(_.toLong))
+  }
 
+  private def queryResultsById(runIds: Seq[Long]): DBIO[Seq[(DbRunResult, Long)]] = {
     val q = for {
       rr <- runResults
       tr <- rr.testRun if tr.runId.inSet(runIds)
     } yield (rr, tr.runId)
-
     q.sortBy { case (rr, runId) => (runId, rr.sequence) }.result
-
-    //val q = runResults.filterOpt(runId)((rr, id) => rr.testRunUuid.in(testRuns.filter(_.runId === id).map(_.uuid)))
-    //q.sortBy(rr => (rr.testRunUuid, rr.sequence)).result
   }
 
   def countTestRuns(runUuidPrefix: Option[String]): DBIO[Int] = {

@@ -1,5 +1,8 @@
 package com.lightbend.benchdb
 
+import java.awt.Desktop
+import java.net.URI
+
 import cats.implicits._
 import com.monovore.decline._
 import java.nio.file.{FileSystems, Files, Path}
@@ -52,6 +55,14 @@ case class GlobalOptions(configPath: Option[Path], noUserConfig: Boolean, props:
     this
   }
 
+  lazy val canBrowse =
+    Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)
+
+  def openInBrowser(uri: URI) = {
+    if(canBrowse) Desktop.getDesktop.browse(uri)
+    else logger.warn(s"Cannot open $uri in browser - not supported by platform")
+  }
+
   lazy val colors = config.getBoolean("colors")
   lazy val unicode = config.getBoolean("unicode")
 
@@ -71,8 +82,6 @@ case class GlobalOptions(configPath: Option[Path], noUserConfig: Boolean, props:
 
     val box: String =
       if(unicode) "\u2501\u250f\u2533\u2513\u2523\u254b\u252b\u2517\u253b\u251b\u2503" else "-/+\\|+|\\+/|"
-
-    val boxS: IndexedSeq[String] = box.map(_.toString)
   }
 }
 

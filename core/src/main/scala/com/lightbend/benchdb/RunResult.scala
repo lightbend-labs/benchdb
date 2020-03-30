@@ -37,6 +37,9 @@ final class RunResult(val db: DbRunResult, val rc: Config, val runId: Long, val 
     }.toMap
   }
 
+  def cnt: Int =
+    db.forks * db.measurementIterations * db.measurementBatchSize
+
   private def parseStatistics(c: Config): Map[String, Double] =
     c.entrySet().asScala.iterator.map { me => (me.getKey, c.getDouble(me.getKey)) }.toMap
 
@@ -144,6 +147,74 @@ object RunResult extends Logging {
           case None => r
         }
       }
+    }
+  }
+
+  def pivot(rs: Iterable[RunResult], pivot: Seq[String], other: Seq[String]): (Iterable[(RunResult, IndexedSeq[Option[RunResult]])], Seq[Seq[String]]) = {
+    val pivotValues = pivot.map { p => rs.iterator.map(r => r.params.getOrElse(p, null)).toVector.distinct }
+    val otherValues = other.map { p => rs.iterator.map(r => r.params.getOrElse(p, null)).toVector.distinct }
+    def types(values: Seq[Seq[String]]) = values.map { ss =>
+      var asLong, asDouble = true
+      def isLong(s: String) = try { s.toLong; true } catch { case _: NumberFormatException => false }
+      def isDouble(s: String) = try { s.toDouble; true } catch { case _: NumberFormatException => false }
+      ss.foreach { s =>
+        if(s != null) {
+          if(asLong) asLong = isLong(s)
+          if(asDouble) asDouble = isDouble(s)
+        }
+      }
+      (asLong, asDouble)
+    }
+    val pivotTypes = types(pivotValues)
+    val otherTypes = types(otherValues)
+
+    def valueCombinations(idx: Int, len: Int): Seq[Seq[String]] = {
+      if(idx == len) Seq(Nil)
+      else {
+        val sub = valueCombinations(idx+1, len)
+        pivotValues(idx).flatMap(s => sub.map(s +: _))
+      }
+    }
+    val pivotColumns = valueCombinations(0, pivot.length).sorted(new ParamOrdering(pivotTypes))
+
+    val fixedTypes = Seq((false, false), (false, false), (true, true), (false, false))
+    val groupsMap = rs.groupBy(r => Seq(r.name, r.db.mode, r.cnt.toString, r.primaryMetric.scoreUnit) ++ other.map(p => r.params.getOrElse(p, null)))
+    val groups = groupsMap.toSeq.sortBy(_._1)(new ParamOrdering(fixedTypes ++ otherTypes))
+    //groups.foreach { case (groupParams, groupData) => println(s"group: $groupParams -> ${groupData.size}") }
+    val grouped = groups.map { case (gr, data) =>
+      val dataColumns = pivotColumns.iterator.map { pc =>
+        val cols = data.filter(r => pc.zip(pivot).forall { case (v, k) => r.params.getOrElse(k, null) == v })
+        if(cols.size > 1)
+          logger.error(s"Group (${gr.mkString(",")}) has ${cols.size} pivoted data sets.")
+        cols.headOption
+      }.toIndexedSeq
+      (data.head, dataColumns)
+    }
+
+    (grouped, pivotColumns)
+  }
+
+  class ParamOrdering(paramTypes: Seq[(Boolean, Boolean)], nullsFirst: Boolean = false) extends Ordering[Seq[String]]{
+    def compare(x: Seq[String], y: Seq[String]): Int = {
+      val it = (x, y, paramTypes).zipped.toIterator
+      while(it.hasNext) {
+        val (x, y, (asLong, asDouble)) = it.next()
+        if(x != null || y != null) {
+          if(x == null) return (if(nullsFirst) -1 else 1)
+          else if(y == null) return (if(nullsFirst) -1 else 1)
+          else if(asLong) {
+            val diff = Ordering.Long.compare(x.toLong, y.toLong)
+            if(diff != 0) return diff
+          } else if(asDouble) {
+            val diff = Ordering.Double.compare(x.toDouble, y.toDouble)
+            if(diff != 0) return diff
+          } else {
+            val diff = Ordering.String.compare(x, y)
+            if(diff != 0) return diff
+          }
+        }
+      }
+      0
     }
   }
 }
