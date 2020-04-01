@@ -7,6 +7,8 @@ class Global(val go: GlobalOptions) {
   private var daoInitialized = false
 
   lazy val dao = {
+    go.checkDbConf()
+    go.validate()
     val dbconf = DatabaseConfig.forConfig[JdbcProfile]("db", go.config)
     val dao = new DAO(dbconf.profile, dbconf.db)
     daoInitialized = true

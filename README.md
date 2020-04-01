@@ -11,12 +11,14 @@ benchdb takes a JMH result file plus some captured environment data (platform, J
 - Create the command line app with [Coursier](https://get-coursier.io/), e.g.:
 
   ```
-  > cs bootstrap com.lightbend.benchdb::benchdb-core:latest.release mysql:mysql-connector-java:8.0.19 -o benchdb
+  > cs bootstrap com.lightbend.benchdb::benchdb-core:latest.release com.h2database:h2:1.4.200 -o benchdb
   ```
   
-  Note that the second dependency is the MySQL JDBC driver. You should replace this with the database driver of your choice. benchdb doesn't use any advanced database features. Any database supported by [Slick](https://scala-slick.org/) should work. 
-  
-- Create a configuration file `.benchdb.conf` in your home directory (or specify a different file manually when calling benchdb) using HOCON syntax for [Typesafe Config](https://github.com/lightbend/config). It needs to contain at least a [DatabaseConfig](https://scala-slick.org/doc/3.3.1/database.html#databaseconfig) for Slick under the name `db`. Example for a remote MySQL/MariaDB database:
+  Note that the second dependency is the database JDBC driver, in this case an H2 embedded database which is recommended for local use on a single machine. You should replace this with the database driver of your choice (e.g. `mysql:mysql-connector-java:8.0.19` for MySQL/MariaDB). benchdb doesn't use any advanced database features. Any database supported by [Slick](https://scala-slick.org/) should work. 
+
+- In order to use an embedded H2 database you can run `benchdb create-config` to create a default configuration file `.benchdb.conf` in your home directory. benchdb config files use HOCON syntax for [Typesafe Config](https://github.com/lightbend/config). You can also specify a path for additional configurations or ignore the user config file with command line options.
+
+  For a multi-machine setup with a database server, you need to create the configuration manually. It needs to contain at least a [DatabaseConfig](https://scala-slick.org/doc/3.3.1/database.html#databaseconfig) for Slick under the name `db`. Here is an example for connecting to a MySQL/MariaDB server:
 
   ```
   db {

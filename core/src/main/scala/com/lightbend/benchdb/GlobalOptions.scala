@@ -17,10 +17,11 @@ import scala.collection.JavaConverters._
 import com.typesafe.config.{ConfigFactory, ConfigParseOptions, ConfigRenderOptions}
 
 case class GlobalOptions(configPath: Option[Path], noUserConfig: Boolean, props: Seq[String]) extends Logging {
+  val userConfPath = FileSystems.getDefault.getPath(System.getProperty("user.home"), ".benchdb.conf")
+
   val config = {
     val opts = ConfigParseOptions.defaults().setAllowMissing(false)
     val refConf = ConfigFactory.parseResources(getClass, "/benchdb-reference.conf")
-    val userConfPath = FileSystems.getDefault.getPath(System.getProperty("user.home"), ".benchdb.conf")
     val userConf =
       if(noUserConfig) refConf
       else if(Files.exists(userConfPath)) {
@@ -48,6 +49,34 @@ case class GlobalOptions(configPath: Option[Path], noUserConfig: Boolean, props:
       overrides.put(s.substring(0, sep), s.substring(sep+1))
     }
     ConfigFactory.parseMap(overrides).withFallback(localConf).resolve()
+  }
+
+  def checkDbConf(): Unit = {
+    if(!config.hasPath("db")) {
+      logger.error("No database configuration specified.")
+      if(!Files.exists(userConfPath) && !noUserConfig)
+        logger.error(s"No user config file '$userConfPath' found. Use `benchdb create-config` to create a default one using an embedded H2 database.")
+    }
+  }
+
+  def createUserConfig(): Unit = {
+    if(Files.exists(userConfPath))
+      logger.error(s"Cannot create default user configuration in '$userConfPath'. File already exists.")
+    else {
+      val dbpath = FileSystems.getDefault.getPath(System.getProperty("user.home"), ".benchdb-data").toAbsolutePath
+      val s = s"""db {
+                 |  profile = "slick.jdbc.H2Profile$$"
+                 |  db {
+                 |    url = "jdbc:h2:$dbpath"
+                 |    driver = org.h2.Driver
+                 |    connectionPool = disabled
+                 |  }
+                 |}
+                 |""".stripMargin
+      File(userConfPath).write(s)(charset = "UTF-8")
+      println(s"Configuration file '$userConfPath' created.")
+      println("Verify the configuration, then use 'benchdb init-db --force' to initialize the database.")
+    }
   }
 
   def validate(): this.type = {

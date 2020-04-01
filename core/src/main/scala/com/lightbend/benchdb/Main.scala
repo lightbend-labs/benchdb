@@ -27,21 +27,23 @@ object Main extends Logging {
 
     val showMetaCommand = Command[GlobalOptions => Unit](name = "show-meta", header =
       """Show the meta data for a project without storing it.
-        |Use the current directory if no project-dir is specified.
-      """.stripMargin, helpFlag = false) {
+        |Use the current directory if no project-dir is specified.""".stripMargin, helpFlag = false) {
       val projectDir = Opts.argument[Path](metavar = "project-dir").withDefault(FileSystems.getDefault.getPath(""))
       projectDir.map { path => showMeta(_, path) }
     }
 
+    val createUserConfigCommand = Command[GlobalOptions => Unit](name = "create-config", header =
+      "Create a default user configuration file using an embedded H2 database.") {
+      Opts(_.createUserConfig())
+    }
+
     val initDbCommand = Command[GlobalOptions => Unit](name = "init-db", header =
-      """Create the database schema.
-      """.stripMargin) {
+      "Create the database schema.") {
       force.map { f => initDb(_, f) }
     }
 
     val deleteDbCommand = Command[GlobalOptions => Unit](name = "delete-db", header =
-      """Drop the database schema.
-      """.stripMargin) {
+      "Drop the database schema.") {
       force.map { f => deleteDb(_, f) }
     }
 
@@ -90,7 +92,7 @@ object Main extends Logging {
     }
 
     val benchdbCommand = Command("benchdb", "jmh benchmark database client") {
-      val sub = Opts.subcommands(showMetaCommand, initDbCommand, deleteDbCommand, insertRunCommand, queryResultsCommand, chartCommand, listRunsCommand)
+      val sub = Opts.subcommands(showMetaCommand, createUserConfigCommand, initDbCommand, deleteDbCommand, insertRunCommand, queryResultsCommand, chartCommand, listRunsCommand)
       (globalOptions, sub).mapN { (go, cmd) => cmd(go) }
     }
 
