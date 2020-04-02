@@ -64,15 +64,13 @@ case class GlobalOptions(configPath: Option[Path], noUserConfig: Boolean, props:
       logger.error(s"Cannot create default user configuration in '$userConfPath'. File already exists.")
     else {
       val dbpath = FileSystems.getDefault.getPath(System.getProperty("user.home"), ".benchdb-data").toAbsolutePath
-      val s = s"""db {
-                 |  profile = "slick.jdbc.H2Profile$$"
-                 |  db {
-                 |    url = "jdbc:h2:$dbpath"
-                 |    driver = org.h2.Driver
-                 |    connectionPool = disabled
-                 |  }
-                 |}
-                 |""".stripMargin
+      val data = Map(
+        "db.profile" -> "slick.jdbc.H2Profile$",
+        "db.db.url" -> s"jdbc:h2:$dbpath",
+        "db.db.driver" -> "org.h2.Driver",
+        "db.db.connectionPool" -> "disabled"
+      )
+      val s = ConfigFactory.parseMap(data.asJava).root.render(ConfigRenderOptions.defaults().setOriginComments(false).setJson(false))
       File(userConfPath).write(s)(charset = "UTF-8")
       println(s"Configuration file '$userConfPath' created.")
       println("Verify the configuration, then use 'benchdb init-db --force' to initialize the database.")
