@@ -1,0 +1,12 @@
+#> set benchdb / logLevel := Level.Debug
+#> set benchdbRun / logLevel := Level.Debug
+> show benchdb:managedClasspath
+> benchdb --help
+> benchdb init-db --force
+> benchdbRun -w 0s -r 0s -to 1s com.example.TestBenchmark
+> benchdbRun --msg "Test Job" -w 0s -r 0s -to 1s com.example.TestBenchmark
+> benchdb list
+> benchdb results
+> benchdb results --raw
+# not using --force because if something's wrong with the config system this could delete the user's real db:
+> benchdb delete-db

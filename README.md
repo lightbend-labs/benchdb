@@ -47,12 +47,10 @@ benchdb takes a JMH result file plus some captured environment data (platform, J
 - First you need to insert some benchmark results into the database, e.g.:
 
   ```
-  > benchdb insert-run --project-dir ../scala --msg "Test 1" ../scala/test/benchmarks/jmh-result.json -wm bulk
+  > benchdb insert-run --project-dir ../scala --msg "Test 1" --jmh-args "-wm bulk" ../scala/test/benchmarks/jmh-result.json
   ```
 
-  The specified project directory (default: current directory) is used to determine git environment data. Any parameters following the result file (`-wm bulk` in this case) are expected to be JMH command line parameters. They are not parsed by benchdb but stored verbatim in the database for reference.
-
-  TODO: Automate this with an sbt plugin to run sbt-jmh and insert the data with a single command.
+  The specified project directory (default: current directory) is used to determine git environment data.
 
 - `benchdb list` lists the benchmark runs in the database, e.g.:
 

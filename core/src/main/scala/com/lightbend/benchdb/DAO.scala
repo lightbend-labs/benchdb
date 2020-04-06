@@ -12,7 +12,7 @@ import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 import scala.collection.JavaConverters._
 
-final case class DbTestRun(uuid: String, runId: Long, timestamp: Timestamp, message: Option[String],
+final case class DbTestRun(uuid: String, runId: Long, timestamp: Timestamp, message: Option[String], jmhArgs: Option[String],
                            gitTimestamp: Option[Timestamp], gitSha: Option[String], gitOrigin: Option[String], gitUpstream: Option[String],
                            hostname: Option[String],
                            javaVendor: Option[String], javaVersion: Option[String], jvmName: Option[String], jvmVersion: Option[String],
@@ -29,14 +29,12 @@ final case class DbRunResultParam(id: Option[Int], runResultUuid: String, key: S
 
 final case class DbJvmArg(runResultUuid: String, sequence: Int, value: String)
 
-final case class DbJmhArg(testRunUuid: String, sequence: Int, value: String)
-
 final case class DbMeta(key: String, value: String)
 
 class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extends Logging {
   import profile.api._
 
-  val DB_VERSION = "1"
+  val DB_VERSION = "2"
 
   def close(): Unit =
     try db.close()
@@ -47,6 +45,7 @@ class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extend
     def runId = column[Long]("RUN_ID", O.AutoInc, O.Unique)
     def timestamp = column[Timestamp]("TIMESTAMP")
     def message = column[Option[String]]("MESSAGE")
+    def jmhArgs = column[Option[String]]("JMH_ARGS")
 
     def gitTimestamp = column[Option[Timestamp]]("GIT_TIMESTAMP")
     def gitSha = column[Option[String]]("GIT_SHA")
@@ -63,8 +62,8 @@ class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extend
     def gitData = column[String]("GIT_DATA")
     def platformData = column[String]("PLATFORM_DATA")
 
-    def * = (uuid, runId, timestamp, message, gitTimestamp, gitSha, gitOrigin, gitUpstream, hostname, javaVendor, javaVersion, jvmName, jvmVersion, username, gitData, platformData).mapTo[DbTestRun]
-    def withoutRaw = (uuid, runId, timestamp, message, gitTimestamp, gitSha, gitOrigin, gitUpstream, hostname, javaVendor, javaVersion, jvmName, jvmVersion, username, "", "").mapTo[DbTestRun]
+    def * = (uuid, runId, timestamp, message, jmhArgs, gitTimestamp, gitSha, gitOrigin, gitUpstream, hostname, javaVendor, javaVersion, jvmName, jvmVersion, username, gitData, platformData).mapTo[DbTestRun]
+    def withoutRaw = (uuid, runId, timestamp, message, jmhArgs, gitTimestamp, gitSha, gitOrigin, gitUpstream, hostname, javaVendor, javaVersion, jvmName, jvmVersion, username, "", "").mapTo[DbTestRun]
   }
 
   lazy val testRuns = TableQuery[TestRunRow]
@@ -119,17 +118,6 @@ class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extend
 
   lazy val jvmArgs = TableQuery[JvmArgRow]
 
-  class JmhArgRow(tag: Tag) extends Table[DbJmhArg](tag, "JMH_ARGS") {
-    def testRunUuid = column[String]("TEST_RUN_UUID", O.Length(36))
-    //def testRun = foreignKey("JMH_ARGS_TEST_RUN_FK", testRunUuid, testRuns)(_.uuid, onDelete=ForeignKeyAction.Cascade)
-    def sequence = column[Int]("SEQUENCE")
-    def value = column[String]("VALUE")
-    def pk = primaryKey("PK_JMH_ARGS", (testRunUuid, sequence))
-    def * = (testRunUuid, sequence, value).mapTo[DbJmhArg]
-  }
-
-  lazy val jmhArgs = TableQuery[JmhArgRow]
-
   class MetaRow(tag: Tag) extends Table[DbMeta](tag, "BENCHDB_META") {
     def key = column[String]("KEY", O.PrimaryKey)
     def value = column[String]("VALUE")
@@ -139,12 +127,12 @@ class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extend
   lazy val meta = TableQuery[MetaRow]
 
   def createDb: DBIO[Unit] = {
-    (testRuns.schema ++ meta.schema ++ runResults.schema ++ runResultParams.schema ++ jvmArgs.schema ++ jmhArgs.schema).create andThen
+    (testRuns.schema ++ meta.schema ++ runResults.schema ++ runResultParams.schema ++ jvmArgs.schema).create andThen
     meta.forceInsert(DbMeta("version", DB_VERSION)).map(_ => ())
   }.transactionally
 
   def dropDb: DBIO[Unit] = {
-    (testRuns.schema ++ meta.schema ++ runResults.schema ++ runResultParams.schema ++ jvmArgs.schema ++ jmhArgs.schema).dropIfExists
+    (testRuns.schema ++ meta.schema ++ runResults.schema ++ runResultParams.schema ++ jvmArgs.schema).dropIfExists
   }.transactionally
 
   def getDbInfo: DBIO[String] =
@@ -153,12 +141,11 @@ class DAO(val profile: JdbcProfile, val db: JdbcProfile#Backend#Database) extend
   def checkVersion: DBIO[Unit] =
     meta.filter(_.key === "version").map(_.value).result.head.map(v => if(v == DB_VERSION) () else logger.error(s"Unsupported database version $v, expeted $DB_VERSION"))
 
-  def insertRun(run: DbTestRun, runResultsData: Iterable[DbRunResult], jvmArgsData: Iterable[DbJvmArg], runResultParamsData: Iterable[DbRunResultParam], jmhArgsData: Iterable[DbJmhArg]): DBIO[Long] = (for {
+  def insertRun(run: DbTestRun, runResultsData: Iterable[DbRunResult], jvmArgsData: Iterable[DbJvmArg], runResultParamsData: Iterable[DbRunResultParam]): DBIO[Long] = (for {
     runId <- (testRuns returning testRuns.map(_.runId)) += run
     _ <- runResults.forceInsertAll(runResultsData)
     _ <- runResultParams.forceInsertAll(runResultParamsData)
     _ <- jvmArgs.forceInsertAll(jvmArgsData)
-    _ <- jmhArgs.forceInsertAll(jmhArgsData)
   } yield runId).transactionally
 
   def queryResults(runIds: Seq[String]): DBIO[Seq[(DbRunResult, Long)]] = {

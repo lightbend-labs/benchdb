@@ -16,7 +16,7 @@ import better.files._
 import scala.collection.JavaConverters._
 import com.typesafe.config.{ConfigFactory, ConfigParseOptions, ConfigRenderOptions}
 
-case class GlobalOptions(configPath: Option[Path], noUserConfig: Boolean, props: Seq[String]) extends Logging {
+case class GlobalOptions(configPaths: Seq[Path], noUserConfig: Boolean, props: Seq[String]) extends Logging {
   val userConfPath = FileSystems.getDefault.getPath(System.getProperty("user.home"), ".benchdb.conf")
 
   val config = {
@@ -31,17 +31,15 @@ case class GlobalOptions(configPath: Option[Path], noUserConfig: Boolean, props:
         logger.debug(s"User configuration file $userConfPath not found")
         refConf
       }
-    val localConf = (configPath match {
-      case Some(p) =>
-        if(Files.exists(p)) {
-          logger.debug(s"Parsing config file $p")
-          ConfigFactory.parseFile(p.toFile, opts).withFallback(userConf)
-        } else {
-          logger.error(s"Configuration file $userConfPath not found")
-          userConf
-        }
-      case None => userConf
-    })
+    val localConf = configPaths.foldLeft(userConf) { (c, p) =>
+      if(Files.exists(p)) {
+        logger.debug(s"Parsing config file $p")
+        ConfigFactory.parseFile(p.toFile, opts).withFallback(c)
+      } else {
+        logger.error(s"Configuration file $p not found")
+        c
+      }
+    }
     val overrides = new java.util.HashMap[String, String]
     props.foreach { s =>
       val sep = s.indexOf('=')

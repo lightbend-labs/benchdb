@@ -15,9 +15,10 @@ import com.typesafe.config.{ConfigFactory, ConfigParseOptions, ConfigRenderOptio
 
 object Main extends Logging {
 
-  def main(args: Array[String]) = try {
+  def main(args: Array[String]) = System.exit(runToStatus(args))
 
-    val config = Opts.option[Path]("config", help = "Configuration file.").orNone
+  def runToStatus(args: Array[String]): Int = try {
+    val config = Opts.options[Path]("config", help = "Configuration file.").map(_.toList).orElse(Opts(Nil))
     val noUserConfig = Opts.flag("no-user-config", help = "Don't read ~/.benchdb.conf").orFalse
     val props = Opts.options[String]("set", short = "D", help = "Overwrite a configuration option (key=value)").map(_.toList).orElse(Opts(Nil))
 
@@ -54,7 +55,7 @@ object Main extends Logging {
       ).withDefault(FileSystems.getDefault.getPath(""))
       val message = Opts.option[String]("msg", help = "Comment message to store with the database entry.").orNone
       val resultFile = Opts.argument[Path](metavar = "result-json-file")
-      val jmhArgs = Opts.arguments[String](metavar = "jmh-args").map(_.toList).orElse(Opts(Nil))
+      val jmhArgs = Opts.option[String]("jmh-args", "JMH command line arguments to store with the database entry.").orNone
       (projectDir, message, resultFile, jmhArgs).mapN { case (projectDir, message, resultFile, jmhArgs) => insertRun(_, projectDir, message, resultFile, jmhArgs) }
     }
 
@@ -67,10 +68,10 @@ object Main extends Logging {
       val pivot = Opts.options[String]("pivot", help = "Parameter names to pivot in table output.").map(_.toList).orElse(Opts(Nil))
       val raw = Opts.flag("raw", "Print raw JSON data instead of a table.").orFalse
       (runs, benchs, extract, scorePrecision, pivot, raw).mapN { case (runs, benchs, extract, sp, pivot, raw) =>
-        { go =>
-          if(raw && pivot.nonEmpty) logger.error("Cannot pivot in raw output mode.")
-          else queryResults(go, runs, benchs, extract, sp, pivot, raw)
-        }
+      { go =>
+        if(raw && pivot.nonEmpty) logger.error("Cannot pivot in raw output mode.")
+        else queryResults(go, runs, benchs, extract, sp, pivot, raw)
+      }
       }
     }
     val chartCommand = Command[GlobalOptions => Unit](name = "chart", header =
@@ -91,7 +92,9 @@ object Main extends Logging {
       (limit, gitData, platformData).mapN { case (limit, gd, pd) => listRuns(_, limit, gd, pd) }
     }
 
-    val benchdbCommand = Command("benchdb", "jmh benchmark database client") {
+    val benchdbCommand = Command("benchdb",
+      s"""benchdb ${BuildInfo.version}
+         |A database and query tool for jmh.""".stripMargin) {
       val sub = Opts.subcommands(showMetaCommand, createUserConfigCommand, initDbCommand, deleteDbCommand, insertRunCommand, queryResultsCommand, chartCommand, listRunsCommand)
       (globalOptions, sub).mapN { (go, cmd) => cmd(go) }
     }
@@ -99,11 +102,11 @@ object Main extends Logging {
     benchdbCommand.parse(args, sys.env) match {
       case Left(help) =>
         System.err.print(help)
-        System.exit(1)
+        if(help.errors.nonEmpty) 1 else 0
       case Right(_) =>
-        System.exit(if(ErrorRecognitionAppender.rearm()) 1 else 0)
+        if(ErrorRecognitionAppender.rearm()) 1 else 0
     }
-  } catch { case _: Abort => System.exit(1) }
+  } catch { case _: Abort => 1 }
 
   def showMeta(go: GlobalOptions, projectDir: Path): Unit = {
     val gd = new GitData(projectDir)
@@ -138,11 +141,11 @@ object Main extends Logging {
     }
   }
 
-  def insertRun(go: GlobalOptions, projectDir: Path, message: Option[String], resultFile: Path, jmhArgs: Seq[String]): Unit = {
+  def insertRun(go: GlobalOptions, projectDir: Path, message: Option[String], resultFile: Path, jmhArgs: Option[String]): Unit = {
     new Global(go).use { g =>
       val gd = new GitData(projectDir)
       val pd = new PlatformData
-      val run = new DbTestRun(UUID.randomUUID().toString, -1, Timestamp.from(Instant.now()), message,
+      val run = new DbTestRun(UUID.randomUUID().toString, -1, Timestamp.from(Instant.now()), message, jmhArgs,
         gd.getHeadDate.map(d => Timestamp.from(Instant.ofEpochMilli(d.getTime))), gd.getHeadSHA, gd.getOriginURL, gd.getUpstreamURL,
         Option(pd.hostname), Option(pd.javaVendor), Option(pd.javaVersion), Option(pd.javaVmName), Option(pd.javaVmVersion),
         Option(pd.userName),
@@ -159,10 +162,7 @@ object Main extends Logging {
         val runResults = daoData.map(_._1)
         val jvmArgs = daoData.flatMap(_._2)
         val runResultParams = daoData.flatMap(_._3)
-        val dJmhArgs = jmhArgs.zipWithIndex.map { case (s, idx) =>
-          new DbJmhArg(run.uuid, idx, s)
-        }
-        val runId = g.dao.run(g.dao.checkVersion andThen g.dao.insertRun(run, runResults, jvmArgs, runResultParams, dJmhArgs))
+        val runId = g.dao.run(g.dao.checkVersion andThen g.dao.insertRun(run, runResults, jvmArgs, runResultParams))
         println(s"Test run #${runId} with ${runResults.size} results inserted.")
       }
     }

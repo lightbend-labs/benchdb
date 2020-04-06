@@ -14,8 +14,11 @@ lazy val root = project.in(file("."))
   )
 
 lazy val core = project.in(file("core"))
+  .enablePlugins(BuildInfoPlugin)
   .settings(
     name := "benchdb-core",
+    buildInfoKeys := Seq[BuildInfoKey](version),
+    buildInfoPackage := "com.lightbend.benchdb",
     libraryDependencies ++= Seq(
       "org.eclipse.jgit" % "org.eclipse.jgit" % "5.6.1.202002131546-r",
       "com.monovore" %% "decline" % "1.0.0",
@@ -35,9 +38,12 @@ lazy val core = project.in(file("core"))
 
 lazy val plugin = project.in(file("plugin"))
   .enablePlugins(SbtPlugin)
+  .enablePlugins(BuildInfoPlugin)
   .settings(
     name := "sbt-benchdb",
     sbtPlugin := true,
+    buildInfoKeys := Seq[BuildInfoKey](organization, name in core, version, scalaVersion in core),
+    buildInfoPackage := "com.lightbend.benchdb.sbtplugin",
     publishMavenStyle := false,
     licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0.html")),
     bintrayReleaseOnPublish := false,

@@ -17,6 +17,9 @@ import org.eclipse.jgit.revwalk.RevWalk
 
 class GitData(projectDir: Path) extends Logging {
 
+  private var _hasData = false
+  def hasData = _hasData
+
   private var headDate: Date = _
   private var headSHA: String = _
   private var originURL: String = _
@@ -61,20 +64,23 @@ class GitData(projectDir: Path) extends Logging {
         }.toSeq
         logger.debug("Parent commits: "+parents.map { case (u, s) => s"[$u: $s]"}.mkString(", "))
       }
+      _hasData = true
     }
   } catch { case NonFatal(ex) => logger.warn("Error analyzing git data", ex) }
 
   lazy val javaMapData: java.util.Map[String, _] = {
-    Map(
-      "head.date" -> headDate.getTime,
-      "head.sha" -> headSHA,
-      "head.branches" -> headBranches.asJava,
-      "head.subject" -> headSubject,
-      "originURL" -> originURL,
-      "upstreamURL" -> upstreamURL,
-      "parents" -> parents.map { case (u, s) => Map("url" -> u, "subject" -> s).asJava }.asJava
-    ).asJava
-  }
+    if(hasData)
+      Map(
+        "head.date" -> headDate.getTime,
+        "head.sha" -> headSHA,
+        "head.branches" -> headBranches.asJava,
+        "head.subject" -> headSubject,
+        "originURL" -> originURL,
+        "upstreamURL" -> upstreamURL,
+        "parents" -> parents.map { case (u, s) => Map("url" -> u, "subject" -> s).asJava }.asJava
+      )
+    else Map.empty[String, Any]
+  }.asJava
 
   def toJsonString: String = ConfigFactory.parseMap(javaMapData).root.render(ConfigRenderOptions.concise())
 }
