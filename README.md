@@ -129,3 +129,9 @@ benchdb takes a JMH result file plus some captured environment data (platform, J
   ```
 
 - `benchdb chart` generates line charts (using the [Google Charts](https://developers.google.com/chart) library). The parameters are the same as for `results`. Charts require a single free parameter which must be `Long`-valued (i.e. all instances can be parsed into a `Long` -- the actual types of the benchmark parameters are not preserved by JMH; it stores everything as a string), like `size` in the example above. In case of pivoted results, all pivoted columns are rendered together as individual series in a single chart. The result of `benchdb chart` is a single, self-contained HTML file. If no output file is specified, it is written to a temporary file and opened in the default browser.
+
+## Maintenance notes
+
+**benchdb is NOT supported under the Lightbend subscription.**
+
+Contributions to this project are very welcome!
