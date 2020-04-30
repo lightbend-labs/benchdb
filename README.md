@@ -1,4 +1,4 @@
-# benchdb - A database and query tool for [JMH](https://openjdk.java.net/projects/code-tools/jmh/) results
+# benchdb - A database and query tool for [JMH](https://openjdk.java.net/projects/code-tools/jmh/) results 
 
 When you run benchmarks with JMH you usually look at the results table printed after the run or maybe generate a JSON file and feed it into [JMH Visualizer](https://jmh.morethan.io/) for immediate consumption. This approach does not scale well when you benchmark lots of different changes or want to compare historical data or visualize more complex benchmark results graphically.
 
