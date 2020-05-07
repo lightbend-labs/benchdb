@@ -183,7 +183,7 @@ object Main extends Logging {
           val c2 = ConfigFactory.parseMap(
             (Map("benchmark" -> r.name) ++ r.params.map { case (k, v) => ("params."+k, v) }).asJava
           ).withFallback(c).resolve()
-          val lines = c2.root.render(ConfigRenderOptions.defaults().setOriginComments(false)).lines.filterNot(_.isEmpty).toIndexedSeq
+          val lines = c2.root.render(ConfigRenderOptions.defaults().setOriginComments(false)).linesIterator.filterNot(_.isEmpty).toIndexedSeq
           print(lines.mkString("    ", "\n    ", ""))
         }
         println()
