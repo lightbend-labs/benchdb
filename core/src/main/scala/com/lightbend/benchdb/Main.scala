@@ -62,15 +62,16 @@ object Main extends Logging {
     val runs = Opts.options[String]("run", short = "r", help = "IDs of the test runs to include (or 'last').").map(_.toList).orElse(Opts(Nil))
     val benchs = Opts.options[String]("benchmark", short = "b", help = "Glob patterns of benchmark names to include.").map(_.toList).orElse(Opts(Nil))
     val extract = Opts.options[String]("extract", help = "Extractor pattern to generate parameters from names.").map(_.toList).orElse(Opts(Nil))
+    val regex = Opts.flag("regex", short = "re", help = "Interpret extract pattern as a Java regular expression.").orFalse
     val scorePrecision = Opts.option[Int]("score-precision", help = "Precision of score and error in tables (default: 3)").withDefault(3)
     val queryResultsCommand = Command[GlobalOptions => Unit](name = "results", header =
       "Query the database for test results and print them.") {
       val pivot = Opts.options[String]("pivot", help = "Parameter names to pivot in table output.").map(_.toList).orElse(Opts(Nil))
       val raw = Opts.flag("raw", "Print raw JSON data instead of a table.").orFalse
-      (runs, benchs, extract, scorePrecision, pivot, raw).mapN { case (runs, benchs, extract, sp, pivot, raw) =>
+      (runs, benchs, extract, regex, scorePrecision, pivot, raw).mapN { case (runs, benchs, extract, regex, sp, pivot, raw) =>
       { go =>
         if(raw && pivot.nonEmpty) logger.error("Cannot pivot in raw output mode.")
-        else queryResults(go, runs, benchs, extract, sp, pivot, raw)
+        else queryResults(go, runs, benchs, extract, regex, sp, pivot, raw)
       }
       }
     }
@@ -79,8 +80,8 @@ object Main extends Logging {
       val template = Opts.option[Path]("template", "HTML template containing file.").orNone
       val out = Opts.option[Path]("out", short = "o", help = "Output file to generate, or '-' for stdout.").orNone
       val pivot = Opts.options[String]("pivot", help = "Parameter names to combine in a chart.").map(_.toList).orElse(Opts(Nil))
-      (runs, benchs, extract, scorePrecision, pivot, template, out).mapN { case (runs, benchs, extract, sp, pivot, template, out) =>
-        createChart(_, runs, benchs, extract, sp, pivot, template, out, args)
+      (runs, benchs, extract, regex, scorePrecision, pivot, template, out).mapN { case (runs, benchs, extract, regex, sp, pivot, template, out) =>
+        createChart(_, runs, benchs, extract, regex, sp, pivot, template, out, args)
       }
     }
 
@@ -168,12 +169,12 @@ object Main extends Logging {
     }
   }
 
-  def queryResults(go: GlobalOptions, runs: Seq[String], benchs: Seq[String], extract: Seq[String], scorePrecision: Int, pivot: Seq[String], raw: Boolean): Unit = try {
+  def queryResults(go: GlobalOptions, runs: Seq[String], benchs: Seq[String], extract: Seq[String], regex: Boolean, scorePrecision: Int, pivot: Seq[String], raw: Boolean): Unit = try {
     new Global(go).use { g =>
       val multi = runs.size > 1
       val allRs = g.dao.run(g.dao.checkVersion andThen g.dao.queryResults(runs))
         .map { case (rr, runId) => RunResult.fromDb(rr, runId, multi) }
-      val rs = RunResult.extract(extract, RunResult.filterByName(benchs, allRs)).toSeq
+      val rs = RunResult.extract(extract, regex, RunResult.filterByName(benchs, allRs)).toSeq
       if(raw) {
         print("[")
         rs.zipWithIndex.foreach { case (r, idx) =>
@@ -258,12 +259,12 @@ object Main extends Logging {
     case ex: PatternSyntaxException => logger.error(ex.toString)
   }
 
-  def createChart(go: GlobalOptions, runs: Seq[String], benchs: Seq[String], extract: Seq[String], scorePrecision: Int, pivot: Seq[String], template: Option[Path], out: Option[Path], cmdLine: Array[String]): Unit = {
+  def createChart(go: GlobalOptions, runs: Seq[String], benchs: Seq[String], extract: Seq[String], regex: Boolean, scorePrecision: Int, pivot: Seq[String], template: Option[Path], out: Option[Path], cmdLine: Array[String]): Unit = {
     new Global(go).use { g =>
       val multi = runs.size > 1
       val allRs = g.dao.run(g.dao.checkVersion andThen g.dao.queryResults(runs))
         .map { case (rr, runId) => RunResult.fromDb(rr, runId, multi) }
-      val rs = RunResult.extract(extract, RunResult.filterByName(benchs, allRs)).toSeq
+      val rs = RunResult.extract(extract, regex, RunResult.filterByName(benchs, allRs)).toSeq
       val allParamNames = rs.flatMap(_.params.keys).distinct.toVector
       val pivotSet = pivot.toSet
       val paramNames = allParamNames.filterNot(pivotSet.contains)

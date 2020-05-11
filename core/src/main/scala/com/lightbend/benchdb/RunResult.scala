@@ -1,9 +1,8 @@
 package com.lightbend.benchdb
 
+import java.lang.reflect.{Field, Method}
 import java.util.regex.{Pattern, PatternSyntaxException}
-
 import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
@@ -87,43 +86,66 @@ object RunResult extends Logging {
     Pattern.compile(b.toString)
   }
 
-  private def compileExtractorPattern(expr: String): (Pattern, ArrayBuffer[String]) = {
-    val b = new StringBuilder
-    var i = 0
-    var inGroup = false
-    val groups = new ArrayBuffer[String]
-    while(i < expr.length) {
-      val c = expr.charAt(i)
-      i += 1
-      c match {
-        case '(' if inGroup => throw new PatternSyntaxException("Capture groups must not be nested", expr, i-1)
-        case ')' if !inGroup => throw new PatternSyntaxException("Unexpected end of capture group", expr, i-1)
-        case '(' =>
-          b.append('(')
-          inGroup = true
-          var nextEq = expr.indexOf('=', i)
-          val nextClose = expr.indexOf(')', i)
-          if(nextClose == -1) throw new PatternSyntaxException("Capture group not closed", expr, i)
-          if(nextEq == -1 || nextEq > nextClose) groups += ""
-          else {
-            val n = expr.substring(i, nextEq)
-            groups += n
-            i = nextEq+1
-          }
-        case ')' =>
-          b.append(')')
-          inGroup = false
-        case '*' => b.append(".*")
-        case c => b.append(Pattern.quote(String.valueOf(c)))
+  private def compileExtractorPattern(expr: String, regex: Boolean): (Pattern, ArrayBuffer[String]) = {
+    if (regex) {
+      val patternLiteral = expr.replaceAll("\\(([^)=]+)=", "(?<$1>")
+      val pattern = Pattern.compile(patternLiteral)
+      val namedGroups = pattern.namedGroups.toSeq.sortBy(_._2)
+      val groups = ArrayBuffer.empty[String]
+      var i = 1
+      for ((name, n) <- namedGroups) {
+        while (i < n) {
+          groups.append("")
+          i += 1
+        }
+        groups.append(name)
+        i += 1
       }
+      val m = pattern.groupCount - 1
+      while (i < m) {
+        groups.append("")
+        i += 1
+      }
+      logger.debug(s"Compiled regex extractor '$expr' to $groups, $namedGroups")
+      (pattern, groups)
+    } else {
+      val b = new StringBuilder
+      var i = 0
+      var inGroup = false
+      val groups = new ArrayBuffer[String]
+      while(i < expr.length) {
+        val c = expr.charAt(i)
+        i += 1
+        c match {
+          case '(' if inGroup => throw new PatternSyntaxException("Capture groups must not be nested", expr, i-1)
+          case ')' if !inGroup => throw new PatternSyntaxException("Unexpected end of capture group", expr, i-1)
+          case '(' =>
+            b.append('(')
+            inGroup = true
+            var nextEq = expr.indexOf('=', i)
+            val nextClose = expr.indexOf(')', i)
+            if(nextClose == -1) throw new PatternSyntaxException("Capture group not closed", expr, i)
+            if(nextEq == -1 || nextEq > nextClose) groups += ""
+            else {
+              val n = expr.substring(i, nextEq)
+              groups += n
+              i = nextEq+1
+            }
+          case ')' =>
+            b.append(')')
+            inGroup = false
+          case '*' => b.append(".*")
+          case c => b.append(Pattern.quote(String.valueOf(c)))
+        }
+      }
+      logger.debug(s"Compiled extractor '$expr' to $b, $groups")
+        (Pattern.compile(b.toString), groups)
     }
-    logger.debug(s"Compiled extractor '$expr' to $b, $groups")
-    (Pattern.compile(b.toString), groups)
   }
 
-  def extract(extractors: Seq[String], rs: Iterable[RunResult]): Iterable[RunResult] = {
+  def extract(extractors: Seq[String], regex: Boolean, rs: Iterable[RunResult]): Iterable[RunResult] = {
     if(extractors.isEmpty) rs else {
-      val patterns = extractors.map(compileExtractorPattern).filter(_._2.nonEmpty)
+      val patterns = extractors.map(extractor => compileExtractorPattern(extractor, regex)).filter(_._2.nonEmpty)
       rs.map { r =>
         val name = r.name
         val matcherOpt = patterns.iterator.map(p => (p._1.matcher(name), p._2)).find(_._1.matches)
@@ -215,6 +237,29 @@ object RunResult extends Logging {
         }
       }
       0
+    }
+  }
+
+  object RichPattern {
+    lazy val namedGroupsMethod: Method = {
+      val m = classOf[Pattern].getDeclaredMethod("namedGroups")
+      m.setAccessible(true)
+      m
+    }
+    lazy val capturingGroupCount: Field = {
+      val f = classOf[Pattern].getDeclaredField("capturingGroupCount")
+      f.setAccessible(true)
+      f
+    }
+  }
+  implicit class RichPattern(val pattern: Pattern) extends AnyVal {
+    import RichPattern._
+    import collection.JavaConverters._
+    def namedGroups: Map[String, Int] = {
+      Map.empty ++ namedGroupsMethod.invoke(pattern).asInstanceOf[java.util.Map[String, Int]].asScala
+    }
+    def groupCount: Int = {
+      capturingGroupCount.get(pattern).asInstanceOf[Int]
     }
   }
 }
