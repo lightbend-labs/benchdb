@@ -26,13 +26,22 @@ final class RunResult(val db: DbRunResult, val rc: Config, val runId: Long, val 
   lazy val dbJvmArgs: Seq[DbJvmArg] = jvmArgs.zipWithIndex.map { case (s, idx) => new DbJvmArg(db.uuid, idx, s) }
   lazy val dbParams: Seq[DbRunResultParam] = params.iterator.map { case (k, v) => new DbRunResultParam(None, db.uuid, k, v) }.toSeq
 
-  lazy val primaryMetric: RunResult.Metric =
+  final def primaryMetricOr(secondary: Option[String]): RunResult.Metric = {
+    secondary match {
+      case Some(m) => secondaryMetrics(m)
+      case None => primaryMetric
+    }
+  }
+
+  private lazy val primaryMetric: RunResult.Metric =
     parseMetric(rc.getConfig("primaryMetric"))
 
-  lazy val secondaryMetrics: Map[String, RunResult.Metric] = {
-    val sc = rc.getConfig("secondaryMetrics")
-    sc.entrySet().asScala.iterator.map { me =>
-      (me.getKey, parseMetric(sc.getConfig(me.getKey)))
+  private lazy val secondaryMetrics: Map[String, RunResult.Metric] = {
+    val path = "secondaryMetrics"
+    val sc = rc.getConfig(path)
+    val keys = rc.getAnyRef(path).asInstanceOf[java.util.Map[String, _]].keySet()
+    keys.asScala.iterator.map { k =>
+      (k, parseMetric(sc.getConfig("\"" + k + "\"")))
     }.toMap
   }
 
@@ -172,7 +181,7 @@ object RunResult extends Logging {
     }
   }
 
-  def pivot(rs: Iterable[RunResult], pivot: Seq[String], other: Seq[String]): (Iterable[(RunResult, IndexedSeq[Option[RunResult]])], Seq[Seq[String]]) = {
+  def pivot(rs: Iterable[RunResult], pivot: Seq[String], other: Seq[String], metric: Option[String]): (Iterable[(RunResult, IndexedSeq[Option[RunResult]])], Seq[Seq[String]]) = {
     val pivotValues = pivot.map { p => rs.iterator.map(r => r.params.getOrElse(p, null)).toVector.distinct }
     val otherValues = other.map { p => rs.iterator.map(r => r.params.getOrElse(p, null)).toVector.distinct }
     def types(values: Seq[Seq[String]]) = values.map { ss =>
@@ -200,7 +209,7 @@ object RunResult extends Logging {
     val pivotColumns = valueCombinations(0, pivot.length).sorted(new ParamOrdering(pivotTypes))
 
     val fixedTypes = Seq((false, false), (false, false), (true, true), (false, false))
-    val groupsMap = rs.groupBy(r => Seq(r.name, r.db.mode, r.cnt.toString, r.primaryMetric.scoreUnit) ++ other.map(p => r.params.getOrElse(p, null)))
+    val groupsMap = rs.groupBy(r => Seq(r.name, r.db.mode, r.cnt.toString, r.primaryMetricOr(metric).scoreUnit) ++ other.map(p => r.params.getOrElse(p, null)))
     val groups = groupsMap.toSeq.sortBy(_._1)(new ParamOrdering(fixedTypes ++ otherTypes))
     //groups.foreach { case (groupParams, groupData) => println(s"group: $groupParams -> ${groupData.size}") }
     val grouped = groups.map { case (gr, data) =>

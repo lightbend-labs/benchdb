@@ -83,6 +83,8 @@ benchdb takes a JMH result file plus some captured environment data (platform, J
   \----------------------------------------------------------+--------+------+-----+------------+----------+-------/
   ```
 
+Secondary metrics can be used in place of the primary metric with `-metric`, (for instance, `-metric ·gc.alloc.rate.norm` shows the the per-operation allocations recorded by JMH's `-prof gc`.
+
 - Extractor patterns can be used to extract additional parameters from benchmark names. They are glob patterns with regular expression-like capture groups. Unnamed groups are discarded, named groups are extracted into parameters. For example:
 
   ```

@@ -3,7 +3,7 @@ package com.lightbend.benchdb
 import scala.collection.JavaConverters._
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject, ConfigRenderOptions, ConfigValueFactory}
 
-class GenerateCharts(go: GlobalOptions, scorePrecision: Int) extends Logging {
+class GenerateCharts(go: GlobalOptions, scorePrecision: Int, metric: Option[String]) extends Logging {
 
   def generatePivoted(pivoted: Iterable[(RunResult, IndexedSeq[Option[RunResult]])],
                       pivotSets: Seq[Seq[String]], pivotParams: Seq[String], otherParams: Seq[String]): String = {
@@ -38,7 +38,7 @@ class GenerateCharts(go: GlobalOptions, scorePrecision: Int) extends Logging {
               }
             }).asJava
           }.asJava
-          renderChartData(n, pn, rs.head._1.primaryMetric.scoreUnit, lineChartOptionsBase, columns, rows)
+          renderChartData(n, pn, vAxisTitle(rs.head._1.primaryMetricOr(metric).scoreUnit), lineChartOptionsBase, columns, rows)
         }
       }
     }.mkString("[", ",", "]")
@@ -63,10 +63,15 @@ class GenerateCharts(go: GlobalOptions, scorePrecision: Int) extends Logging {
           val rows = rs.zip(paramValues.map(_.get)).sortBy(_._2).map { case (r, pv) =>
             (pv +: seriesRowData(s"$pn = $pv", r)).asJava
           }.asJava
-          renderChartData(n, pn, rs.head.primaryMetric.scoreUnit, lineChartOptionsBase, columns, rows)
+          renderChartData(n, pn, vAxisTitle(rs.head.primaryMetricOr(metric).scoreUnit), lineChartOptionsBase, columns, rows)
         }
       }
     }.mkString("[", ",", "]")
+  }
+
+  private def vAxisTitle(unit: String) = metric match {
+    case Some(x) => x + " " + unit
+    case None => unit
   }
 
   private def renderChartData(title: String, hAxis: String, vAxis: String, baseConfig: Config, columns: Any, rows: Any): String = {
@@ -91,10 +96,11 @@ class GenerateCharts(go: GlobalOptions, scorePrecision: Int) extends Logging {
   )
 
   private def seriesRowData(name: String, r: RunResult): Seq[Any] = {
-    val score = r.primaryMetric.score
-    val err = r.primaryMetric.scoreError
+    val metric1 = r.primaryMetricOr(metric)
+    val score = metric1.score
+    val err = metric1.scoreError
     val scoreS = ScoreFormatter(score, scorePrecision)
     val errS = ScoreFormatter(err, scorePrecision)
-    Seq(score, score-err, score+err, s"$name<br/>Score: <b>$scoreS</b> ± $errS ${r.primaryMetric.scoreUnit}")
+    Seq(score, score-err, score+err, s"$name<br/>Score: <b>$scoreS</b> ± $errS ${metric1.scoreUnit}")
   }
 }
