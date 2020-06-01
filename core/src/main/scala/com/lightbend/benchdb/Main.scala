@@ -68,10 +68,11 @@ object Main extends Logging {
       "Query the database for test results and print them.") {
       val pivot = Opts.options[String]("pivot", help = "Parameter names to pivot in table output.").map(_.toList).orElse(Opts(Nil))
       val raw = Opts.flag("raw", "Print raw JSON data instead of a table.").orFalse
-      (runs, benchs, extract, regex, scorePrecision, pivot, raw).mapN { case (runs, benchs, extract, regex, sp, pivot, raw) =>
+      val metric = Opts.option[String]("metric", "Secondary metric to report rather than the primary, e.g. ·gc.alloc.rate.norm").orNone
+      (runs, benchs, extract, regex, scorePrecision, pivot, raw, metric).mapN { case (runs, benchs, extract, regex, sp, pivot, raw, metric) =>
       { go =>
         if(raw && pivot.nonEmpty) logger.error("Cannot pivot in raw output mode.")
-        else queryResults(go, runs, benchs, extract, regex, sp, pivot, raw)
+        else queryResults(go, runs, benchs, extract, regex, sp, pivot, raw, metric)
       }
       }
     }
@@ -80,8 +81,9 @@ object Main extends Logging {
       val template = Opts.option[Path]("template", "HTML template containing file.").orNone
       val out = Opts.option[Path]("out", short = "o", help = "Output file to generate, or '-' for stdout.").orNone
       val pivot = Opts.options[String]("pivot", help = "Parameter names to combine in a chart.").map(_.toList).orElse(Opts(Nil))
-      (runs, benchs, extract, regex, scorePrecision, pivot, template, out).mapN { case (runs, benchs, extract, regex, sp, pivot, template, out) =>
-        createChart(_, runs, benchs, extract, regex, sp, pivot, template, out, args)
+      val metric = Opts.option[String]("metric", "Secondary metric to report rather than the primary, e.g. ·gc.alloc.rate.norm").orNone
+      (runs, benchs, extract, regex, scorePrecision, pivot, metric, template, out).mapN { case (runs, benchs, extract, regex, sp, pivot, metric, template, out) =>
+        createChart(_, runs, benchs, extract, regex, sp, pivot, metric, template, out, args)
       }
     }
 
@@ -169,12 +171,16 @@ object Main extends Logging {
     }
   }
 
-  def queryResults(go: GlobalOptions, runs: Seq[String], benchs: Seq[String], extract: Seq[String], regex: Boolean, scorePrecision: Int, pivot: Seq[String], raw: Boolean): Unit = try {
+  def queryResults(go: GlobalOptions, runs: Seq[String], benchs: Seq[String], extract: Seq[String], regex: Boolean, scorePrecision: Int, pivot: Seq[String], raw: Boolean, metric: Option[String]): Unit = try {
     new Global(go).use { g =>
       val multi = runs.size > 1
       val allRs = g.dao.run(g.dao.checkVersion andThen g.dao.queryResults(runs))
         .map { case (rr, runId) => RunResult.fromDb(rr, runId, multi) }
       val rs = RunResult.extract(extract, regex, RunResult.filterByName(benchs, allRs)).toSeq
+      val benchmarkLabel = metric match {
+        case Some(id) => s"Benchmark [$id]"
+        case None => "Benchmark"
+      }
       if(raw) {
         print("[")
         rs.zipWithIndex.foreach { case (r, idx) =>
@@ -200,14 +206,15 @@ object Main extends Logging {
             paramNames.map(s => Format(Align.Right)),
             Seq(Format(), Format(Align.Right), Format(Align.Right), Format(Align.Right), Format())
           ).flatten
-          val header = (("Benchmark" +: paramNames.map(s => s"($s)")) ++ Vector("Mode", "Cnt", "Score", "Error", "Units")).map(formatHeader)
+          val header = ((benchmarkLabel +: paramNames.map(s => s"($s)")) ++ Vector("Mode", "Cnt", "Score", "Error", "Units")).map(formatHeader)
           val data = rs.iterator.map { r =>
+            val score = r.primaryMetricOr(metric)
             Vector(
               Seq(r.name),
               paramNames.map(k => r.params.getOrElse(k, "")),
               Seq(r.db.mode, r.cnt,
-                ScoreFormatter(r.primaryMetric.score, scorePrecision), ScoreFormatter(r.primaryMetric.scoreError, scorePrecision),
-                r.primaryMetric.scoreUnit)
+                ScoreFormatter(score.score, scorePrecision), ScoreFormatter(score.scoreError, scorePrecision),
+                score.scoreUnit)
             ).flatten
           }.toVector
           val table = new TableFormatter(go).apply(columns, Vector(header, null) ++ data)
@@ -215,7 +222,7 @@ object Main extends Logging {
         } else if(paramNames.length + pivotSet.size != allParamNames.length) {
             logger.error(s"Illegal pivot parameters.")
         } else {
-          val (pivoted, pivotSets) = RunResult.pivot(rs, pivot, paramNames)
+          val (pivoted, pivotSets) = RunResult.pivot(rs, pivot, paramNames, metric)
           val columns = Vector(
             Seq(Format()),
             paramNames.map(s => Format(Align.Right)),
@@ -230,7 +237,7 @@ object Main extends Logging {
             Seq(""),
           ).flatten
           val header2 = Vector(
-            Seq("Benchmark"),
+            Seq(benchmarkLabel),
             paramNames.map(s => s"($s)"),
             Seq("Mode", "Cnt"),
             pivotSets.flatMap(_ => Seq("Score", "Error")),
@@ -238,7 +245,9 @@ object Main extends Logging {
           ).flatten.map(formatHeader)
           val data = pivoted.iterator.map { case (r, pivotData) =>
             val scoreData = pivotData.flatMap {
-              case Some(rr) => Seq(ScoreFormatter(rr.primaryMetric.score, scorePrecision), ScoreFormatter(rr.primaryMetric.scoreError, scorePrecision))
+              case Some(rr) =>
+                val score = rr.primaryMetricOr(metric)
+                Seq(ScoreFormatter(score.score, scorePrecision), ScoreFormatter(score.scoreError, scorePrecision))
               case None => Seq(null, null)
             }
             Vector(
@@ -246,7 +255,7 @@ object Main extends Logging {
               paramNames.map(k => r.params.getOrElse(k, "")),
               Seq(r.db.mode, r.cnt),
               scoreData,
-              Seq(r.primaryMetric.scoreUnit)
+              Seq(r.primaryMetricOr(metric).scoreUnit)
             ).flatten
           }.toVector
           val table = new TableFormatter(go).apply(columns, Vector(header1, header2, null) ++ data)
@@ -259,7 +268,7 @@ object Main extends Logging {
     case ex: PatternSyntaxException => logger.error(ex.toString)
   }
 
-  def createChart(go: GlobalOptions, runs: Seq[String], benchs: Seq[String], extract: Seq[String], regex: Boolean, scorePrecision: Int, pivot: Seq[String], template: Option[Path], out: Option[Path], cmdLine: Array[String]): Unit = {
+  def createChart(go: GlobalOptions, runs: Seq[String], benchs: Seq[String], extract: Seq[String], regex: Boolean, scorePrecision: Int, pivot: Seq[String], metric: Option[String], template: Option[Path], out: Option[Path], cmdLine: Array[String]): Unit = {
     new Global(go).use { g =>
       val multi = runs.size > 1
       val allRs = g.dao.run(g.dao.checkVersion andThen g.dao.queryResults(runs))
@@ -268,14 +277,14 @@ object Main extends Logging {
       val allParamNames = rs.flatMap(_.params.keys).distinct.toVector
       val pivotSet = pivot.toSet
       val paramNames = allParamNames.filterNot(pivotSet.contains)
-      val gen = new GenerateCharts(go, scorePrecision)
+      val gen = new GenerateCharts(go, scorePrecision, metric)
       val data =
         if(pivot.isEmpty) gen.generate(rs)
         else if(paramNames.length + pivotSet.size != allParamNames.length) {
           logger.error(s"Illegal pivot parameters.")
           ""
         } else {
-          val (pivoted, pivotSets) = RunResult.pivot(rs, pivot, paramNames)
+          val (pivoted, pivotSets) = RunResult.pivot(rs, pivot, paramNames, metric)
           gen.generatePivoted(pivoted, pivotSets, pivot, paramNames)
         }
       val templateHtml = template match {
