@@ -29,7 +29,7 @@ object Main extends Logging {
     val showMetaCommand = Command[GlobalOptions => Unit](name = "show-meta", header =
       """Show the meta data for a project without storing it.
         |Use the current directory if no project-dir is specified.""".stripMargin, helpFlag = false) {
-      val projectDir = Opts.argument[Path](metavar = "project-dir").withDefault(FileSystems.getDefault.getPath(""))
+      val projectDir = Opts.argument[Path](metavar = "project-dir").withDefault(FileSystems.getDefault.getPath("").toAbsolutePath)
       projectDir.map { path => showMeta(_, path) }
     }
 
