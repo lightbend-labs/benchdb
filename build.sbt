@@ -26,7 +26,7 @@ lazy val core = project.in(file("core"))
       "com.typesafe.slick" %% "slick" % "3.3.2",
       "mysql" % "mysql-connector-java" % "8.0.19" % "optional",
       "com.h2database" % "h2" % "1.4.200" % "optional",
-      "com.typesafe" % "config" % "1.4.0",
+      "com.typesafe" % "config" % "1.4.1",
       "org.slf4j" % "slf4j-api" % "1.7.30",
       "ch.qos.logback" % "logback-classic" % "1.1.6",
       "com.novocode" % "junit-interface" % "0.11" % "test"
