@@ -4,7 +4,7 @@ lazy val root = project.in(file("."))
   .settings(inThisBuild(Seq(
     organization := "com.lightbend.benchdb",
     //version := "0.1-SNAPSHOT",
-    scalaVersion := "2.12.10",
+    scalaVersion := "2.12.14",
     scalacOptions ++= Seq("-deprecation", "-unchecked"),
   )))
   .settings(
@@ -32,8 +32,8 @@ lazy val core = project.in(file("core"))
       "com.novocode" % "junit-interface" % "0.11" % "test"
     ),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s", "-a"),
-    fork in Test := true,
-    parallelExecution in Test := false
+    Test / fork := true,
+    Test / parallelExecution := false
   )
 
 lazy val plugin = project.in(file("plugin"))
@@ -42,14 +42,11 @@ lazy val plugin = project.in(file("plugin"))
   .settings(
     name := "sbt-benchdb",
     sbtPlugin := true,
-    buildInfoKeys := Seq[BuildInfoKey](organization, name in core, version, scalaVersion in core),
+    buildInfoKeys := Seq[BuildInfoKey](organization, core / name, version, core / scalaVersion),
     buildInfoPackage := "com.lightbend.benchdb.sbtplugin",
     publishMavenStyle := false,
     licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0.html")),
-    bintrayReleaseOnPublish := false,
-    bintrayRepository := "sbt-plugins",
-    bintrayOrganization := None,
     scriptedLaunchOpts ++= Seq("-Xmx1024M", "-Dplugin.version=" + version.value),
     scriptedBufferLog := false,
-    scriptedDependencies := { val _ = ((publishLocal in core).value, publishLocal.value) },
+    scriptedDependencies := { val _ = ((core / publishLocal).value, publishLocal.value) },
   )
