@@ -23,7 +23,7 @@ lazy val core = project.in(file("core"))
       "org.eclipse.jgit" % "org.eclipse.jgit" % "5.12.0.202106070339-r",
       "com.monovore" %% "decline" % "1.4.0",
       "com.github.pathikrit" %% "better-files" % "3.9.1",
-      "com.typesafe.slick" %% "slick" % "3.3.2",
+      "com.typesafe.slick" %% "slick" % "3.3.3",
       "mysql" % "mysql-connector-java" % "8.0.26" % "optional",
       "com.h2database" % "h2" % "1.4.200" % "optional",
       "com.typesafe" % "config" % "1.4.1",
