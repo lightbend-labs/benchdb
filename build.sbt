@@ -27,7 +27,7 @@ lazy val core = project.in(file("core"))
       "mysql" % "mysql-connector-java" % "8.0.28" % "optional",
       "com.h2database" % "h2" % "2.1.210" % "optional",
       "com.typesafe" % "config" % "1.4.1",
-      "org.slf4j" % "slf4j-api" % "1.7.33",
+      "org.slf4j" % "slf4j-api" % "1.7.36",
       "ch.qos.logback" % "logback-classic" % "1.2.10",
       "com.github.sbt" % "junit-interface" % "0.13.3" % "test"
     ),
