@@ -10,7 +10,7 @@ class TableFormatter(val go: GlobalOptions) {
   import TableFormatter._
   import go.format._
 
-  protected[this] def formatLine(line: IndexedSeq[Any], formats: IndexedSeq[Format]): IndexedSeq[Cell] = (line, formats).zipped.map { (v, c) =>
+  protected[this] def formatLine(line: IndexedSeq[Any], formats: IndexedSeq[Format]): IndexedSeq[Cell] = line.lazyZip(formats).map { (v, c) =>
     def fmtSimple(v: Any): String = v match {
       case null => ""
       case Some(v) => fmtSimple(v)
@@ -83,7 +83,7 @@ class TableFormatter(val go: GlobalOptions) {
         }
       }
     }
-    widths
+    widths.toIndexedSeq
   }
 
   private def formatSeparator(widths: IndexedSeq[Int], lIdx: Int, cIdx: Int, rIdx: Int): String = {

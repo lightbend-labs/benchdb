@@ -227,7 +227,7 @@ object RunResult extends Logging {
 
   class ParamOrdering(paramTypes: Seq[(Boolean, Boolean)], nullsFirst: Boolean = false) extends Ordering[Seq[String]]{
     def compare(x: Seq[String], y: Seq[String]): Int = {
-      val it = (x, y, paramTypes).zipped.toIterator
+      val it = x.lazyZip(y).lazyZip(paramTypes).iterator
       while(it.hasNext) {
         val (x, y, (asLong, asDouble)) = it.next()
         if(x != null || y != null) {
@@ -237,7 +237,7 @@ object RunResult extends Logging {
             val diff = Ordering.Long.compare(x.toLong, y.toLong)
             if(diff != 0) return diff
           } else if(asDouble) {
-            val diff = Ordering.Double.compare(x.toDouble, y.toDouble)
+            val diff = Ordering.Double.TotalOrdering.compare(x.toDouble, y.toDouble)
             if(diff != 0) return diff
           } else {
             val diff = Ordering.String.compare(x, y)
