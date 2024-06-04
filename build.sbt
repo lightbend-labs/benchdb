@@ -4,7 +4,7 @@ lazy val root = project.in(file("."))
   .settings(inThisBuild(Seq(
     organization := "com.lightbend.benchdb",
     //version := "0.1-SNAPSHOT",
-    scalaVersion := "2.12.19",
+    scalaVersion := "2.13.14",
     scalacOptions ++= Seq("-deprecation", "-unchecked"),
   )))
   .settings(
@@ -42,6 +42,7 @@ lazy val plugin = project.in(file("plugin"))
   .settings(
     name := "sbt-benchdb",
     sbtPlugin := true,
+    scalaVersion := "2.12.19",
     buildInfoKeys := Seq[BuildInfoKey](organization, core / name, version, core / scalaVersion),
     buildInfoPackage := "com.lightbend.benchdb.sbtplugin",
     publishMavenStyle := false,
