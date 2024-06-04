@@ -83,7 +83,7 @@ class TableFormatter(val go: GlobalOptions) {
         }
       }
     }
-    widths
+    widths.toIndexedSeq
   }
 
   private def formatSeparator(widths: IndexedSeq[Int], lIdx: Int, cIdx: Int, rIdx: Int): String = {

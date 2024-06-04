@@ -237,7 +237,7 @@ object RunResult extends Logging {
             val diff = Ordering.Long.compare(x.toLong, y.toLong)
             if(diff != 0) return diff
           } else if(asDouble) {
-            val diff = Ordering.Double.compare(x.toDouble, y.toDouble)
+            val diff = Ordering.Double.TotalOrdering.compare(x.toDouble, y.toDouble)
             if(diff != 0) return diff
           } else {
             val diff = Ordering.String.compare(x, y)
