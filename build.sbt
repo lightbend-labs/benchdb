@@ -21,14 +21,14 @@ lazy val core = project.in(file("core"))
     buildInfoPackage := "com.lightbend.benchdb",
     libraryDependencies ++= Seq(
       "org.eclipse.jgit" % "org.eclipse.jgit" % "6.9.0.202403050737-r",
-      "com.monovore" %% "decline" % "2.2.0",
+      "com.monovore" %% "decline" % "2.4.1",
       "com.github.pathikrit" %% "better-files" % "3.9.2",
-      "com.typesafe.slick" %% "slick" % "3.3.3",
+      "com.typesafe.slick" %% "slick" % "3.5.1",
       "mysql" % "mysql-connector-java" % "8.0.33" % "optional",
-      "com.h2database" % "h2" % "2.1.214" % "optional",
+      "com.h2database" % "h2" % "2.2.224" % "optional",
       "com.typesafe" % "config" % "1.4.3",
       "org.slf4j" % "slf4j-api" % "2.0.13",
-      "ch.qos.logback" % "logback-classic" % "1.2.13",
+      "ch.qos.logback" % "logback-classic" % "1.5.6",
       "com.github.sbt" % "junit-interface" % "0.13.3" % "test"
     ),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s", "-a"),
