@@ -21,11 +21,11 @@ lazy val core = project.in(file("core"))
     buildInfoPackage := "com.lightbend.benchdb",
     libraryDependencies ++= Seq(
       "org.eclipse.jgit" % "org.eclipse.jgit" % "6.9.0.202403050737-r",
-      "com.monovore" %% "decline" % "2.2.0",
+      "com.monovore" %% "decline" % "2.4.1",
       "com.github.pathikrit" %% "better-files" % "3.9.2",
       "com.typesafe.slick" %% "slick" % "3.3.3",
       "com.mysql" % "mysql-connector-j" % "8.4.0" % "optional",
-      "com.h2database" % "h2" % "2.1.214" % "optional",
+      "com.h2database" % "h2" % "2.2.224" % "optional",
       "com.typesafe" % "config" % "1.4.3",
       "org.slf4j" % "slf4j-api" % "1.7.36",
       "ch.qos.logback" % "logback-classic" % "1.2.13",
