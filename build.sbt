@@ -25,7 +25,7 @@ lazy val core = project.in(file("core"))
       "com.github.pathikrit" %% "better-files" % "3.9.2",
       "com.typesafe.slick" %% "slick" % "3.3.3",
       "mysql" % "mysql-connector-java" % "8.0.33" % "optional",
-      "com.h2database" % "h2" % "2.1.212" % "optional",
+      "com.h2database" % "h2" % "2.1.214" % "optional",
       "com.typesafe" % "config" % "1.4.3",
       "org.slf4j" % "slf4j-api" % "1.7.36",
       "ch.qos.logback" % "logback-classic" % "1.2.13",
