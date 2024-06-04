@@ -22,7 +22,7 @@ lazy val core = project.in(file("core"))
     libraryDependencies ++= Seq(
       "org.eclipse.jgit" % "org.eclipse.jgit" % "6.0.0.202111291000-r",
       "com.monovore" %% "decline" % "2.2.0",
-      "com.github.pathikrit" %% "better-files" % "3.9.1",
+      "com.github.pathikrit" %% "better-files" % "3.9.2",
       "com.typesafe.slick" %% "slick" % "3.3.3",
       "mysql" % "mysql-connector-java" % "8.0.28" % "optional",
       "com.h2database" % "h2" % "2.1.210" % "optional",
