@@ -4,7 +4,7 @@ lazy val root = project.in(file("."))
   .settings(inThisBuild(Seq(
     organization := "com.lightbend.benchdb",
     //version := "0.1-SNAPSHOT",
-    scalaVersion := "2.12.15",
+    scalaVersion := "2.12.19",
     scalacOptions ++= Seq("-deprecation", "-unchecked"),
   )))
   .settings(
@@ -22,13 +22,13 @@ lazy val core = project.in(file("core"))
     libraryDependencies ++= Seq(
       "org.eclipse.jgit" % "org.eclipse.jgit" % "6.0.0.202111291000-r",
       "com.monovore" %% "decline" % "2.2.0",
-      "com.github.pathikrit" %% "better-files" % "3.9.1",
+      "com.github.pathikrit" %% "better-files" % "3.9.2",
       "com.typesafe.slick" %% "slick" % "3.3.3",
-      "mysql" % "mysql-connector-java" % "8.0.28" % "optional",
+      "mysql" % "mysql-connector-java" % "8.0.33" % "optional",
       "com.h2database" % "h2" % "2.1.214" % "optional",
-      "com.typesafe" % "config" % "1.4.1",
-      "org.slf4j" % "slf4j-api" % "1.7.33",
-      "ch.qos.logback" % "logback-classic" % "1.2.10",
+      "com.typesafe" % "config" % "1.4.3",
+      "org.slf4j" % "slf4j-api" % "1.7.36",
+      "ch.qos.logback" % "logback-classic" % "1.2.13",
       "com.github.sbt" % "junit-interface" % "0.13.3" % "test"
     ),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s", "-a"),
