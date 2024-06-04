@@ -28,7 +28,7 @@ lazy val core = project.in(file("core"))
       "com.h2database" % "h2" % "2.2.224" % "optional",
       "com.typesafe" % "config" % "1.4.3",
       "org.slf4j" % "slf4j-api" % "1.7.36",
-      "ch.qos.logback" % "logback-classic" % "1.2.13",
+      "ch.qos.logback" % "logback-classic" % "1.5.6",
       "com.github.sbt" % "junit-interface" % "0.13.3" % "test"
     ),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s", "-a"),
