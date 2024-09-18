@@ -28,7 +28,7 @@ lazy val core = project.in(file("core"))
       "com.h2database" % "h2" % "2.2.224" % "optional",
       "com.typesafe" % "config" % "1.4.3",
       "org.slf4j" % "slf4j-api" % "2.0.16",
-      "ch.qos.logback" % "logback-classic" % "1.5.6",
+      "ch.qos.logback" % "logback-classic" % "1.5.8",
       "com.github.sbt" % "junit-interface" % "0.13.3" % "test"
     ),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s", "-a"),
@@ -42,7 +42,7 @@ lazy val plugin = project.in(file("plugin"))
   .settings(
     name := "sbt-benchdb",
     sbtPlugin := true,
-    scalaVersion := "2.12.19",
+    scalaVersion := "2.12.20",
     buildInfoKeys := Seq[BuildInfoKey](organization, core / name, version, core / scalaVersion),
     buildInfoPackage := "com.lightbend.benchdb.sbtplugin",
     publishMavenStyle := false,
