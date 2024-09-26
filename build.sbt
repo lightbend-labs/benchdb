@@ -4,7 +4,7 @@ lazy val root = project.in(file("."))
   .settings(inThisBuild(Seq(
     organization := "com.lightbend.benchdb",
     //version := "0.1-SNAPSHOT",
-    scalaVersion := "2.13.14",
+    scalaVersion := "2.13.15",
     scalacOptions ++= Seq("-deprecation", "-unchecked"),
   )))
   .settings(
