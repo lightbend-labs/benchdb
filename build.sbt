@@ -4,7 +4,7 @@ lazy val root = project.in(file("."))
   .settings(inThisBuild(Seq(
     organization := "com.lightbend.benchdb",
     //version := "0.1-SNAPSHOT",
-    scalaVersion := "2.13.14",
+    scalaVersion := "2.13.15",
     scalacOptions ++= Seq("-deprecation", "-unchecked"),
   )))
   .settings(
@@ -20,15 +20,15 @@ lazy val core = project.in(file("core"))
     buildInfoKeys := Seq[BuildInfoKey](version),
     buildInfoPackage := "com.lightbend.benchdb",
     libraryDependencies ++= Seq(
-      "org.eclipse.jgit" % "org.eclipse.jgit" % "6.10.0.202406032230-r",
+      "org.eclipse.jgit" % "org.eclipse.jgit" % "7.0.0.202409031743-r",
       "com.monovore" %% "decline" % "2.4.1",
       "com.github.pathikrit" %% "better-files" % "3.9.2",
-      "com.typesafe.slick" %% "slick" % "3.5.1",
+      "com.typesafe.slick" %% "slick" % "3.5.2",
       "com.mysql" % "mysql-connector-j" % "9.1.0" % "optional",
-      "com.h2database" % "h2" % "2.2.224" % "optional",
+      "com.h2database" % "h2" % "2.3.232" % "optional",
       "com.typesafe" % "config" % "1.4.3",
-      "org.slf4j" % "slf4j-api" % "2.0.13",
-      "ch.qos.logback" % "logback-classic" % "1.5.8",
+      "org.slf4j" % "slf4j-api" % "2.0.16",
+      "ch.qos.logback" % "logback-classic" % "1.5.11",
       "com.github.sbt" % "junit-interface" % "0.13.3" % "test"
     ),
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-q", "-v", "-s", "-a"),
