@@ -20,7 +20,7 @@ lazy val core = project.in(file("core"))
     buildInfoKeys := Seq[BuildInfoKey](version),
     buildInfoPackage := "com.lightbend.benchdb",
     libraryDependencies ++= Seq(
-      "org.eclipse.jgit" % "org.eclipse.jgit" % "7.0.0.202409031743-r",
+      "org.eclipse.jgit" % "org.eclipse.jgit" % "7.1.0.202411261347-r",
       "com.monovore" %% "decline" % "2.4.1",
       "com.github.pathikrit" %% "better-files" % "3.9.2",
       "com.typesafe.slick" %% "slick" % "3.5.2",
