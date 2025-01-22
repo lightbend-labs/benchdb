@@ -24,7 +24,7 @@ lazy val core = project.in(file("core"))
       "com.monovore" %% "decline" % "2.4.1",
       "com.github.pathikrit" %% "better-files" % "3.9.2",
       "com.typesafe.slick" %% "slick" % "3.5.2",
-      "com.mysql" % "mysql-connector-j" % "9.1.0" % "optional",
+      "com.mysql" % "mysql-connector-j" % "9.2.0" % "optional",
       "com.h2database" % "h2" % "2.3.232" % "optional",
       "com.typesafe" % "config" % "1.4.3",
       "org.slf4j" % "slf4j-api" % "2.0.16",
